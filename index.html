@@ -1,0 +1,1352 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title data-i18n="header.title.page">MyAgentTeam — 你的专属 AI 团队</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+  <link rel="stylesheet" href="styles.css?v=f12-1" />
+  <!-- F+13 Sprint 1: 拆分模块 · 必须在 app.js 之前加载 -->
+  <!-- 加载顺序：utils/vendor/constants 无 cross 依赖 · storage 依赖 constants -->
+  <!-- F+13 Sprint 3: types.js 在最前面加载，让 @typedef 全局生效 -->
+  <script src="src/types/types.js?v=f24-0"></script>
+  <!-- F+13 Sprint 1.5/A pilot 已回滚：type="module" 是 deferred，破坏后续 plain script 依赖链 -->
+  <script src="src/lib/utils.js?v=f24-0"></script>
+  <script src="src/lib/vendor.js?v=f24-0"></script>
+  <script src="src/lib/constants.js?v=f24-0"></script>
+  <script src="src/state/state.js?v=f24-0"></script>
+  <script src="src/persist/storage.js?v=f24-0"></script>
+  <script src="src/persist/encryption.js?v=f24-0"></script>
+  <script src="src/persist/indexeddb.js?v=f24-0"></script>
+  <script src="src/state/kb.js?v=f24-0"></script>
+  <script src="src/scenes/scene_config.js?v=f24-0"></script>
+  <script src="src/llm/stream.js?v=f24-0"></script>
+  <script src="src/llm/llm.js?v=f24-0"></script>
+  <script src="src/state/store.js?v=f24-0"></script>
+  <script src="src/tools/tools.js?v=f24-0"></script>
+  <script src="src/scenes/agents.js?v=f24-0"></script>
+  <script src="src/llm/simulated.js?v=f24-0"></script>
+  <script src="src/ui/render.js?v=f24-0"></script>
+  <!-- F+22.1: 模型下拉 UI 拆分（F+17 hot zone） -->
+  <script src="src/ui/model_picker.js?v=f24-0"></script>
+  <!-- F+22.2: 历史任务 UI 拆分（F+18 改过） -->
+  <script src="src/ui/history.js?v=f24-0"></script>
+  <!-- F+22.3: 记忆/学习拆分（4 个核心函数） -->
+  <script src="src/memory/learning.js?v=f24-0"></script>
+  <script src="src/scenes/orchestrator.js?v=f24-0"></script>
+  <!-- F+14 i18n Phase 1: i18n.js 必须在 zh/en 之前；zh/en 注册到 MAT_I18N 后由 app.js init 触发 walkAndTranslate -->
+  <script src="src/i18n/i18n.js?v=f24-0"></script>
+  <script src="src/i18n/zh.js?v=f24-0"></script>
+  <script src="src/i18n/en.js?v=f24-0"></script>
+</head>
+<body>
+  <!-- ========== 顶栏 ========== -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div class="brand-text">
+        <div class="brand-title">MyAgentTeam</div>
+        <div class="brand-sub" data-i18n="header.brand.sub">你的专属 AI 团队 · V1</div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button id="runningBadge" class="running-badge hidden" title="任务运行中，点击查看" data-i18n-title="header.running.title">
+        <span class="running-dot"></span> <span data-i18n="header.running">运行中</span>
+      </button>
+      <!-- F+14 i18n: 语言切换器 -->
+      <button id="langToggleBtn" class="icon-btn" data-i18n-title="header.lang.toggle.title" title="切换到 English" style="min-width: 44px">
+        <span id="langToggleLabel" data-i18n="header.lang.label">EN</span>
+      </button>
+      <div class="project-switcher-wrap">
+        <button id="projectSwitcherBtn" class="icon-btn" title="切换项目（F+11）" data-i18n-title="header.project.title">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <span class="icon-btn-label"><span id="projectSwitcherName" data-i18n="header.project.default">默认</span> ▾</span>
+        </button>
+        <div id="projectSwitcherMenu" class="project-menu hidden"></div>
+      </div>
+      <button id="introBtn" class="icon-btn" title="产品介绍" data-i18n-title="header.intro.title">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span class="icon-btn-label" data-i18n="header.intro">介绍</span>
+      </button>
+      <button id="historyBtn" class="icon-btn" title="历史任务" data-i18n-title="header.history.title">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/><polyline points="12 7 12 12 16 14"/></svg>
+        <span class="icon-btn-label" data-i18n="header.history">历史</span>
+      </button>
+      <button id="settingsBtn" class="icon-btn" title="设置" data-i18n-title="header.settings.title">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span class="icon-btn-label" data-i18n="header.settings">设置</span>
+      </button>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- ========== 介绍页 ========== -->
+    <section id="intro" class="intro hidden">
+      <div class="intro-hero">
+        <div class="intro-mark">M</div>
+        <h1>MyAgentTeam</h1>
+        <p class="intro-tagline">用一句话指挥你的 AI 团队 —— 多 Agent 协作 · 跨厂商混合 · 长程会话记忆</p>
+        <div class="intro-stats">
+          <div class="intro-stat"><div class="intro-stat-n">6</div><div class="intro-stat-l" data-i18n="hero.vendors">厂商</div></div>
+          <div class="intro-stat"><div class="intro-stat-n">∞</div><div class="intro-stat-l" data-i18n="hero.models">任意 model · 用户驱动 F+17</div></div>
+          <div class="intro-stat"><div class="intro-stat-n">3</div><div class="intro-stat-l" data-i18n="hero.scenes">内置场景</div></div>
+          <div class="intro-stat"><div class="intro-stat-n">5</div><div class="intro-stat-l" data-i18n="hero.modes">编排模式</div></div>
+          <div class="intro-stat"><div class="intro-stat-n">11</div><div class="intro-stat-l" data-i18n="hero.presets">范式预设</div></div>
+          <div class="intro-stat"><div class="intro-stat-n">5</div><div class="intro-stat-l" data-i18n="hero.memory">记忆源</div></div>
+          <div class="intro-stat intro-stat-new"><div class="intro-stat-n">3</div><div class="intro-stat-l"><span data-i18n="hero.tools">Agent 工具</span> <span class="new-pill">F+</span></div></div>
+          <div class="intro-stat intro-stat-new"><div class="intro-stat-n">2</div><div class="intro-stat-l" data-i18n="hero.forced_tools">强制工具场景</div></div>
+          <div class="intro-stat intro-stat-new"><div class="intro-stat-n">30+</div><div class="intro-stat-l" data-i18n="hero.stability">生产稳定 F+</div></div>
+          <div class="intro-stat intro-stat-new"><div class="intro-stat-n">∞</div><div class="intro-stat-l" data-i18n="hero.projects">项目空间 F+11</div></div>
+          <div class="intro-stat intro-stat-new"><div class="intro-stat-n">12</div><div class="intro-stat-l">历史功能 F+18</div></div>
+          <div class="intro-stat intro-stat-new"><div class="intro-stat-n">中/英</div><div class="intro-stat-l">双语 i18n F+14</div></div>
+          <div class="intro-stat"><div class="intro-stat-n">0</div><div class="intro-stat-l" data-i18n="hero.no_backend">中间服务器</div></div>
+        </div>
+        <button id="introStartBtn" class="primary-btn">立即开始 ▸</button>
+        <div class="intro-hero-sub">
+          浏览器直连 6 家厂商 API · 5 路长程记忆按需注入 · 可选 AES-GCM 加密
+        </div>
+      </div>
+
+      <!-- ===== F+19：快速开始 + 内容导航 ===== -->
+      <section class="intro-section intro-section-new" id="sec-0">
+        <h2 data-i18n="intro.quickstart.h2">🚀 快速开始 · 3 步</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:14px 0">
+          <div style="background:rgba(108,140,255,0.08);border-left:3px solid var(--accent);padding:14px;border-radius:6px">
+            <div style="font-size:13px;color:var(--accent);margin-bottom:6px"><strong data-i18n="intro.quickstart.step1.label">STEP 1 · 5 秒</strong></div>
+            <div style="font-size:14px;line-height:1.6" data-i18n-html="intro.quickstart.step1.body">顶栏 <code>⚙ 设置</code> → 填<strong>任意一家</strong> API Key<br/>
+            <span style="font-size:12px;color:var(--text-muted)">推荐 DeepSeek（最便宜）或 OpenAI（最熟）。豆包国内友好但要部署到 vercel 走代理。</span></div>
+          </div>
+          <div style="background:rgba(108,140,255,0.08);border-left:3px solid var(--accent);padding:14px;border-radius:6px">
+            <div style="font-size:13px;color:var(--accent);margin-bottom:6px"><strong data-i18n="intro.quickstart.step2.label">STEP 2 · 10 秒</strong></div>
+            <div style="font-size:14px;line-height:1.6" data-i18n-html="intro.quickstart.step2.body">主页输入框<strong>写一句话任务</strong>（≥ 20 字效果好）<br/>
+            <span style="font-size:12px;color:var(--text-muted)">"该选 React 还是 Vue？SaaS 项目，团队 3 人，技术栈以 TS 为主"</span></div>
+          </div>
+          <div style="background:rgba(108,140,255,0.08);border-left:3px solid var(--accent);padding:14px;border-radius:6px">
+            <div style="font-size:13px;color:var(--accent);margin-bottom:6px"><strong data-i18n="intro.quickstart.step3.label">STEP 3 · 30 秒</strong></div>
+            <div style="font-size:14px;line-height:1.6" data-i18n-html="intro.quickstart.step3.body">点 <code>🚀 启动</code> 或挑场景 chip（⚖ 决策 / 📋 规划 / 🔍 起底）<br/>
+            <span style="font-size:12px;color:var(--text-muted)">系统自动识别场景；后续可改场景配置（每 Agent 单独选模型）</span></div>
+          </div>
+        </div>
+        <p style="color:var(--text-muted);font-size:12px;margin-top:4px" data-i18n-html="intro.quickstart.cost"><strong>💰 成本预估</strong>：决策跑一次 $0.05-$0.30 · 起底 $0.15-$0.50 · 规划 $0.02-$0.10。任务前弹层显示精确预估。</p>
+
+        <h3 style="margin-top:24px;font-size:15px">📍 本页内容（13 章节）</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px;margin-top:8px">
+          <a href="#sec-1"  style="padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);font-size:12.5px">🎯 核心理念</a>
+          <a href="#sec-2"  style="padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);font-size:12.5px">📦 3 内置场景</a>
+          <a href="#sec-3"  style="padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);font-size:12.5px">🧠 长程记忆</a>
+          <a href="#sec-5"  style="padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);font-size:12.5px">🛠 Agent 工具</a>
+          <a href="#sec-6"  style="padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);font-size:12.5px">📁 项目空间</a>
+          <a href="#sec-7"  style="padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);font-size:12.5px">🛡 生产稳定 16 项</a>
+          <a href="#sec-8"  style="padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);font-size:12.5px">🌐 中英 i18n</a>
+          <a href="#sec-9"  style="padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);font-size:12.5px">🧠 工程哲学</a>
+          <a href="#sec-10" style="padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);font-size:12.5px">🛠 自定义团队</a>
+          <a href="#sec-11" style="padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);font-size:12.5px">🧬 5 编排模式</a>
+          <a href="#sec-12" style="padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);font-size:12.5px">🌐 6 厂商 · 模型表</a>
+          <a href="#sec-13" style="padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);font-size:12.5px">🔐 隐私与安全</a>
+          <a href="#sec-compare" style="padding:6px 10px;background:rgba(250,204,21,0.10);border:1px solid #facc15;border-radius:6px;text-decoration:none;color:#facc15;font-size:12.5px"><strong>⚖ vs 别的工具</strong></a>
+          <a href="#sec-faq" style="padding:6px 10px;background:rgba(250,204,21,0.10);border:1px solid #facc15;border-radius:6px;text-decoration:none;color:#facc15;font-size:12.5px"><strong>💬 FAQ 常见问题</strong></a>
+        </div>
+      </section>
+
+      <section class="intro-section" id="sec-1">
+        <h2 data-i18n="intro.core.h2">🎯 核心理念</h2>
+        <p data-i18n="intro.core.body">普通聊天 = 一个模型对你单聊，一次性，无记忆；MyAgentTeam = 一个由你设计的 AI 团队彼此讨论，记得过去任务，知道你是谁，把你的问题打磨清楚后再给你答案。</p>
+
+        <div class="intro-compare">
+          <div class="intro-compare-col">
+            <div class="intro-compare-h" data-i18n="intro.core.compare.left.h">普通 LLM 聊天</div>
+            <ul>
+              <li data-i18n="intro.core.compare.left.1">单模型对你单聊</li>
+              <li data-i18n="intro.core.compare.left.2">每次任务从零开始</li>
+              <li data-i18n="intro.core.compare.left.3">不知道你是谁</li>
+              <li data-i18n="intro.core.compare.left.4">厂商锁定 + 服务器中转</li>
+              <li data-i18n="intro.core.compare.left.5">失败常常沉默</li>
+            </ul>
+          </div>
+          <div class="intro-compare-arrow">→</div>
+          <div class="intro-compare-col highlight">
+            <div class="intro-compare-h" data-i18n="intro.core.compare.right.h">MyAgentTeam</div>
+            <ul>
+              <li data-i18n="intro.core.compare.right.1">多 Agent 协作辩论</li>
+              <li data-i18n="intro.core.compare.right.2">5 路长程记忆按需注入</li>
+              <li data-i18n="intro.core.compare.right.3">项目上下文 + 自学画像</li>
+              <li data-i18n="intro.core.compare.right.4">6 厂商可混 + 浏览器直连</li>
+              <li data-i18n="intro.core.compare.right.5">7 状态码翻译 + 可操作建议</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="intro-section" id="sec-2">
+        <h2>📦 3 个内置场景 —— 每个生产稳定，每个用最合适的编排模式</h2>
+        <p><strong>F+11 产品聚焦 · F+12 起底替换写作</strong>：从 6 → 3 极致聚焦，每个场景都做到生产可用。开箱即用，零配置。输入框写一句话，系统自动识别 → 启动。需要写作 / 分析 / 学习等其他场景？用「🛠️ 自定义团队」装配（5 编排模式 + 11 预设，包括完整的写作 4 工序）。</p>
+        <div class="intro-scene-grid">
+          <div class="intro-scene"><span class="intro-scene-icon">📋</span><strong>规划 · Reflection</strong><div>PM 拟方案 ⇄ 顾问评审 × 3 轮</div><div class="ex">例：规划一个上线方案</div></div>
+          <div class="intro-scene"><span class="intro-scene-icon">⚖️</span><strong>决策 · Multi-phase</strong><div>3 信息 Agent 并行 → 质证 → 协调裁决（F+ 强制工具 · F+ 旗舰）</div><div class="ex">例：该选 React 还是 Vue</div></div>
+          <div class="intro-scene"><span class="intro-scene-icon">🔍</span><strong>起底 · Multi-phase</strong><div>3 搜证 Agent 并行（基础事实 / 时间线 / 第三方记录）→ 交叉核验找矛盾 → 档案整理员 9 段事实档案。**不下结论、不评价、只有客观事实**（F+12 强制工具）</div><div class="ex">例：起底 xxx 公司 / 查查这个产品 / xxx 是什么来头</div></div>
+        </div>
+        <p style="color:var(--text-muted);margin-top:14px"><strong>💡 进阶：</strong>每个场景 chip 右上角的齿轮 ⚙ 可为该场景的每个 Agent 单独指定模型 —— 例如让写作场景的"撰稿"用 gpt-4o 写、"校对"用 gpt-4o-mini 检查，跨厂商混合任意搭配。改过的场景会出现 ✨ 标记。</p>
+      </section>
+
+      <section class="intro-section intro-section-new" id="sec-3">
+        <h2><span data-i18n="intro.memory.h2">🧠 长程会话记忆</span> <span class="new-pill" data-i18n="intro.memory.new_pill">NEW</span></h2>
+        <p>普通聊天每次任务都是金鱼脑。MyAgentTeam 通过 <strong>5 个独立记忆源</strong>给 Agent 持续上下文，每条都可独立开关 + 设置 token 预算上限：</p>
+
+        <div class="intro-memory-flow">
+          <div class="intro-memory-node">
+            <div class="intro-memory-icon">📌</div>
+            <div class="intro-memory-name" data-i18n="intro.memory.1.name">项目上下文</div>
+            <div class="intro-memory-desc" data-i18n="intro.memory.1.desc">你手填的 500 字长期背景（"我是 SaaS 创业者，偏好简洁"），注入每个任务的每个 Agent</div>
+            <div class="intro-memory-cap" data-i18n="intro.memory.1.cap">软上限 800 token</div>
+          </div>
+          <div class="intro-memory-node">
+            <div class="intro-memory-icon">🧬</div>
+            <div class="intro-memory-name" data-i18n="intro.memory.2.name">用户画像（自学）</div>
+            <div class="intro-memory-desc" data-i18n="intro.memory.2.desc">任务结束后 LLM 自动摘要"关于你的新事实"（最多 20 条 FIFO），30 天自动过期</div>
+            <div class="intro-memory-cap" data-i18n="intro.memory.2.cap">软上限 400 token</div>
+          </div>
+          <div class="intro-memory-node">
+            <div class="intro-memory-icon">🔗</div>
+            <div class="intro-memory-name" data-i18n="intro.memory.3.name">引用过往任务</div>
+            <div class="intro-memory-desc" data-i18n="intro.memory.3.desc">启动新任务时可选"基于之前 React vs Vue 那次决策继续"，结果摘要进入新任务上下文</div>
+            <div class="intro-memory-cap" data-i18n="intro.memory.3.cap">软上限 600 token</div>
+          </div>
+          <div class="intro-memory-node">
+            <div class="intro-memory-icon">📂</div>
+            <div class="intro-memory-name" data-i18n="intro.memory.4.name">知识库（RAG）</div>
+            <div class="intro-memory-desc" data-i18n="intro.memory.4.desc">上传 .txt / .md 文档 → 浏览器内分块 → 任务启动时按关键词召回 top-3 相关 chunk</div>
+            <div class="intro-memory-cap" data-i18n="intro.memory.4.cap">软上限 800 token</div>
+          </div>
+          <div class="intro-memory-node">
+            <div class="intro-memory-icon">🤖</div>
+            <div class="intro-memory-name" data-i18n="intro.memory.5.name">Agent 个体记忆</div>
+            <div class="intro-memory-desc" data-i18n="intro.memory.5.desc">每个内置 Agent 累积自己跑过的任务记忆，下次启动时回顾"我之前为该用户做过什么"</div>
+            <div class="intro-memory-cap" data-i18n="intro.memory.5.cap">软上限 300 token · 默认关</div>
+          </div>
+        </div>
+
+        <div class="intro-memory-features">
+          <div class="intro-memory-feature">
+            <strong>📊 Token 预算可视化</strong><br/>
+            启动任务时弹层展示"记忆消耗"明细：每源已用多少 token，总共 +多少费用。超总预算自动按优先级裁剪低优先级源。
+          </div>
+          <div class="intro-memory-feature">
+            <strong>🧹 自动 Hygiene</strong><br/>
+            启动时自动跑：30 天过期清理 / Jaccard ≥ 0.7 去重 / 一正一反冲突检测。设置面板可手动「🧹 立即清理」。
+          </div>
+          <div class="intro-memory-feature">
+            <strong>🛡 你完全掌控</strong><br/>
+            5 个独立开关 + "不记忆此任务"勾选 + 导出/导入 JSON + 一键清空全部记忆 + 可选 PBKDF2+AES-GCM 加密整个记忆库。
+          </div>
+        </div>
+
+        <p style="color:var(--text-muted);margin-top:14px;font-size:12.5px">
+          <strong>⏯ 任务延续</strong>：刷新页面或意外断网，未完成的任务会自动恢复 —— 首页顶部出现「⏯ 继续未完成的任务」横幅，一键回到原任务。
+        </p>
+      </section>
+
+      <section class="intro-section intro-section-new" id="sec-4">
+        <h2>🔧 Agent 工具调用 <span class="new-pill">NEW</span></h2>
+        <p>普通模型 API 调用没有联网能力，"分析最新数据"只能凭训练截止日期前的知识 → 容易瞎说。工具调用让 Agent 在回答前**主动查实**：</p>
+
+        <div class="intro-memory-flow">
+          <div class="intro-memory-node">
+            <div class="intro-memory-icon">🌐</div>
+            <div class="intro-memory-name">web_search</div>
+            <div class="intro-memory-desc">联网搜索（Tavily 全球可用，免费 1000/月）。Agent 拿到真实 URL + 摘要 + 时间</div>
+            <div class="intro-memory-cap">用户带 Tavily Key</div>
+          </div>
+          <div class="intro-memory-node">
+            <div class="intro-memory-icon">📄</div>
+            <div class="intro-memory-name">web_fetch</div>
+            <div class="intro-memory-desc">把搜索结果 URL 进去读全文 markdown（Jina Reader 免 Key）。深读源文档</div>
+            <div class="intro-memory-cap">免 Key</div>
+          </div>
+          <div class="intro-memory-node">
+            <div class="intro-memory-icon">🕐</div>
+            <div class="intro-memory-name">date_now</div>
+            <div class="intro-memory-desc">告知当前日期 / 时区。让 Agent 写"截至 2026 年 X 月..."而非"截至我所知"</div>
+            <div class="intro-memory-cap">纯本地</div>
+          </div>
+          <div class="intro-memory-node">
+            <div class="intro-memory-icon">🧮</div>
+            <div class="intro-memory-name">js_execute</div>
+            <div class="intro-memory-desc">Web Worker 沙箱内执行 JS：算数 / 排序 / 统计 / 数据处理。防模型算错</div>
+            <div class="intro-memory-cap">纯本地</div>
+          </div>
+        </div>
+
+        <div class="intro-memory-features">
+          <div class="intro-memory-feature">
+            <strong>🔄 自动循环</strong><br/>
+            Agent 自主决定调用哪个工具、调几次，最多 5 轮。无需用户介入。
+          </div>
+          <div class="intro-memory-feature">
+            <strong>🛡 多层防御</strong><br/>
+            单工具超时 30s + 结果自动截断 8000 字符 + 沙箱执行 + 5 轮硬上限，防失控
+          </div>
+          <div class="intro-memory-feature">
+            <strong>⚙ 精细控制</strong><br/>
+            自定义团队每个 Agent 独立"启用工具"勾选，内置 6 场景一个全局开关
+          </div>
+        </div>
+
+        <p style="color:var(--text-muted);margin-top:14px;font-size:12.5px">
+          <strong>解决了集体幻觉问题：</strong>多 Agent 辩论时，没有工具的话每个 Agent 都引用训练数据 → 即便互相质证，也可能"集体说错"。开启工具后，每个 Agent 看到的是<strong>同一份真实搜索结果</strong>，证据基于事实，辩论才有意义。
+        </p>
+      </section>
+
+      <section class="intro-section intro-section-new" id="sec-5">
+        <h2><span data-i18n="intro.tools.h2">🛠 Agent 工具调用</span> <span class="new-pill">F+ NEW</span></h2>
+        <p><span data-i18n="intro.tools.body">普通 LLM 通过 API 调用时<strong>没有联网能力</strong> —— 即使多 Agent 互相辩论，也只是基于 2024 训练数据的"集体幻觉"。MyAgentTeam 给 Agent 配了 3 个工具，让事实有真实出处：</span></p>
+
+        <div class="intro-tools-grid">
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🌐</div>
+            <div class="intro-tool-name">web_search</div>
+            <div class="intro-tool-desc" data-i18n="intro.tools.web_search.desc">通过 Tavily API 联网搜索实时信息，返回 5-10 条 web 结果含真实 URL、标题、摘要</div>
+            <div class="intro-tool-cap" data-i18n="intro.tools.web_search.cap">需 Tavily Key（免费 1000 次/月）</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">📄</div>
+            <div class="intro-tool-name">web_fetch</div>
+            <div class="intro-tool-desc" data-i18n="intro.tools.web_fetch.desc">深读 URL —— 通过 Jina Reader 抓取完整页面，返回 Markdown（前 8000 字）</div>
+            <div class="intro-tool-cap" data-i18n="intro.tools.web_fetch.cap">免 Key（Jina Reader 公开服务）</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🕐</div>
+            <div class="intro-tool-name">date_now</div>
+            <div class="intro-tool-desc" data-i18n="intro.tools.date_now.desc">获取当前日期、时间、时区。让 Agent 写"2026 年..."而不是"截至我所知"</div>
+            <div class="intro-tool-cap" data-i18n="intro.tools.date_now.cap">免 Key（纯本地 JS）</div>
+          </div>
+        </div>
+
+        <h3 class="intro-h3" style="margin-top:18px" data-i18n="intro.tools.force_h3">F+ 强制工具的 2 个场景</h3>
+        <p>不是所有场景都需要联网。<strong>F+ 设计原则：事实依赖高的场景默认强制工具，事实无关的场景保持纯发散</strong>。</p>
+        <div class="intro-force-tools">
+          <div class="intro-force-tool-row">
+            <span class="intro-force-icon">⚖️</span>
+            <strong data-i18n="intro.tools.force.decision.label">决策</strong>
+            <span class="intro-force-desc" data-i18n="intro.tools.force.decision.desc">A B C 取证 + 协调裁决前都强制 web_search。无 Tavily Key 启动时显示集体幻觉警告。</span>
+          </div>
+          <div class="intro-force-tool-row">
+            <span class="intro-force-icon">📝</span>
+            <strong data-i18n="intro.tools.force.writing.label">写作</strong>
+            <span class="intro-force-desc" data-i18n="intro.tools.force.writing.desc">撰稿强制搜真实案例数据；校对强制 web_search + web_fetch 验证每条引用。</span>
+          </div>
+        </div>
+
+        <h3 class="intro-h3" style="margin-top:14px" data-i18n="intro.tools.optional_h3">不强制工具的场景</h3>
+        <ul class="intro-bullets">
+          <li><strong>规划</strong>：走全局开关（设置面板「🛠️ 内置场景允许 Agent 调用工具」），不强制</li>
+          <li><strong>自定义团队</strong>：每个 Agent 卡片可独立勾选"🛠 启用工具"</li>
+        </ul>
+
+        <p style="color:var(--text-muted);margin-top:14px;font-size:12.5px">
+          <strong>💡 工具执行循环</strong>：每个启用工具的 Agent 最多 5 次 tool_call 循环（决策/分析 Phase 1 Agent prompt 强制至少 4 次 web_search 充分调研 · F+5）。Agent 自主决定调哪个工具、调几次、何时停 —— 这是"workflow + 节点内 Agent"混合架构的"Agent"部分。短 ctx 模型（如豆包 lite 32K）累积超 ctx*0.6 阈值时自动折叠老 tool result，保留最新 1 个完整（F+6）。
+        </p>
+      </section>
+
+      <section class="intro-section intro-section-new" id="sec-6">
+        <h2><span data-i18n="intro.project.h2">📁 项目空间</span> <span class="new-pill">F+11 NEW</span></h2>
+        <p data-i18n="intro.project.body">解决多主题混用时跨任务记忆污染的问题。每个项目是独立命名空间，🧠 用户画像 / 📌 项目上下文 / 🤖 Agent 记忆 完全隔离 —— 周一在"前端选型"项目学到的事实，绝不会污染周三的"住房决策"项目。</p>
+        <div class="intro-tools-grid">
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🔀</div>
+            <div class="intro-tool-name" data-i18n="intro.project.card.1.name">独立命名空间</div>
+            <div class="intro-tool-desc" data-i18n="intro.project.card.1.desc">每个项目独立的 📌 项目上下文 / 👤 用户画像 / 🧠 Agent 记忆。历史任务按 projectId 过滤显示。</div>
+            <div class="intro-tool-cap" data-i18n="intro.project.card.1.cap">共享：⚙ 设置 / 📂 知识库 / 🛠 自定义团队</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">⚡</div>
+            <div class="intro-tool-name" data-i18n="intro.project.card.2.name">顶栏一键切换</div>
+            <div class="intro-tool-desc" data-i18n="intro.project.card.2.desc">右上角项目 chip → dropdown 切换 / 新建 / 管理。任务运行中自动禁用切换避免上下文错乱。</div>
+            <div class="intro-tool-cap" data-i18n="intro.project.card.2.cap">最小操作成本</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🛡</div>
+            <div class="intro-tool-name" data-i18n="intro.project.card.3.name">零迁移成本</div>
+            <div class="intro-tool-desc" data-i18n="intro.project.card.3.desc">旧版本数据首次加载自动迁移到「默认」项目，幂等可重入。"默认"项目不允许删除，避免误操作。</div>
+            <div class="intro-tool-cap" data-i18n="intro.project.card.3.cap">向后兼容</div>
+          </div>
+        </div>
+        <p style="color:var(--text-muted);margin-top:14px;font-size:12.5px" data-i18n="intro.project.footer">
+          典型用法：技术决策 + 个人事务 + 工作项目 A/B/C 分开管理，AI 团队的"用户认知"在每个项目里独立成长。
+        </p>
+      </section>
+
+      <section class="intro-section intro-section-new" id="sec-7">
+        <h2><span data-i18n="intro.stability.h2">🛡 生产稳定性 16 处升级</span> <span class="new-pill">F+18.1</span></h2>
+        <p data-i18n="intro.stability.body">从决策场景实际运行陆续暴露 10+ 个国内模型场景的具体问题，本次全数修完。每条都是真实跑出来的，不是理论补丁：</p>
+
+        <div class="intro-tools-grid">
+          <div class="intro-tool">
+            <div class="intro-tool-icon">⚡</div>
+            <div class="intro-tool-name" data-i18n="intro.stability.card.1.name">豆包 1.5 → 2.0 全量升级</div>
+            <div class="intro-tool-desc" data-i18n="intro.stability.card.1.desc">model ID 直调路线（无需 endpoint）· 自动 vendor 推断 · 兼容 ep-xxxxxxxx 自定义</div>
+            <div class="intro-tool-cap">F+1</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">⏰</div>
+            <div class="intro-tool-name" data-i18n="intro.stability.card.2.name">国内慢模型 timeout 适配</div>
+            <div class="intro-tool-desc" data-i18n="intro.stability.card.2.desc">singleAgent 120s · 决策 Phase 1 150s · coordinator 5 min · 任务总 15 min</div>
+            <div class="intro-tool-cap">F+2 · F+8</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">📜</div>
+            <div class="intro-tool-name" data-i18n="intro.stability.card.3.name">裁决长输出不再截断</div>
+            <div class="intro-tool-desc" data-i18n="intro.stability.card.3.desc">MAX_TOKENS 1500 → 8000 · coordinator 8 段裁决（问题/证据/分歧/推理/不确定性/推荐/折中/风险）完整呈现</div>
+            <div class="intro-tool-cap">F+3 · F+4</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">📦</div>
+            <div class="intro-tool-name" data-i18n="intro.stability.card.4.name">短 ctx 模型自适应折叠</div>
+            <div class="intro-tool-desc" data-i18n="intro.stability.card.4.desc">豆包 lite 32K / 自定义 endpoint 也可用 · 累积超 ctx×0.6 阈值自动折叠最老 tool result</div>
+            <div class="intro-tool-cap">F+6</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🔧</div>
+            <div class="intro-tool-name" data-i18n="intro.stability.card.5.name">Agent tool 触发数 UI</div>
+            <div class="intro-tool-desc" data-i18n="intro.stability.card.5.desc">消耗面板每行加 🔧×N 显示该 Agent 实际触发的 tool call 总次数 · 配合强制 4 次 search 直观可见</div>
+            <div class="intro-tool-cap">F+5</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🌐</div>
+            <div class="intro-tool-name" data-i18n="intro.stability.card.6.name">Tavily 中文乱码过滤</div>
+            <div class="intro-tool-desc" data-i18n="intro.stability.card.6.desc">新浪财经等 GB18030 页面 description 含乱码 → 自动替换为「页面编码异常」提示 + 保留 URL，避免 Agent 退回训练数据</div>
+            <div class="intro-tool-cap">F+10</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">⏸</div>
+            <div class="intro-tool-name" data-i18n="intro.stability.card.7.name">暂停按钮真的能暂停</div>
+            <div class="intro-tool-desc" data-i18n="intro.stability.card.7.desc">决策场景 6 处循环原本只检查 abort 没检查 paused → 加 waitWhilePaused helper 全场景生效</div>
+            <div class="intro-tool-cap">F+9</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🧠</div>
+            <div class="intro-tool-name" data-i18n="intro.stability.card.8.name">DeepSeek R1 工具调用修复</div>
+            <div class="intro-tool-desc" data-i18n="intro.stability.card.8.desc">callDeepSeek R1 分支原漏传 tools → R1 永远收不到工具 → 退回训练数据；已补全 tools / tool_choice / messagesOverride</div>
+            <div class="intro-tool-cap">F+7</div>
+          </div>
+
+          <!-- ===== F+13 ~ F+18.1 8 张新卡（F+19 增补）===== -->
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🏗</div>
+            <div class="intro-tool-name">Sprint 1-3 模块化大重构</div>
+            <div class="intro-tool-desc">app.js 单体拆 11+ 模块（utils/state/llm/orchestrator/storage/tools/agents...）+ 17 个 JSDoc @typedef + 68 个 smoke test + 浏览器内 test runner（<code>?test=1</code>）。零回归</div>
+            <div class="intro-tool-cap">F+13</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🌉</div>
+            <div class="intro-tool-name">ARK CORS hybrid 透明代理</div>
+            <div class="intro-tool-desc">豆包 ARK 不返 CORS header → 生产不可用。撤回方案 A，做方案 D：Vercel Edge Function 80 行 pass-through · localhost 直连 / 生产 same-origin。Key 不存 vercel</div>
+            <div class="intro-tool-cap">F+14.1</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">📋</div>
+            <div class="intro-tool-name">显示 vendor 真实 error.message</div>
+            <div class="intro-tool-desc">handleApiError 加 7 行通用 JSON 提取（error.message / msg / 4 个 fallback 字段）。"请求被拒绝（400）"→ "Tools parameter not supported by..." 直接定位</div>
+            <div class="intro-tool-cap">F+14.3</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">⏸</div>
+            <div class="intro-tool-name">暂停按钮在 tool 循环中真生效</div>
+            <div class="intro-tool-desc">F+9 修过的暂停 bug 在另一个模块复发：runAgent 内部 tool 循环漏检查 paused → 30-60s 无响应。加 2 处 waitWhilePaused → 降到 5-10s</div>
+            <div class="intro-tool-cap">F+15</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🩺</div>
+            <div class="intro-tool-name">multi-phase Phase 2 content=[] critical bug</div>
+            <div class="intro-tool-desc">orchestrator.js L997 把 assistant 消息 content 写成空数组而非 res.text。OpenAI/Claude 宽容当空串掩盖；<strong>豆包严格校验 400 直接暴露</strong>。多 vendor 架构 = 自我免疫系统</div>
+            <div class="intro-tool-cap">F+16</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🎯</div>
+            <div class="intro-tool-name">模型下拉智能感知</div>
+            <div class="intro-tool-desc">🔑 没 Key 厂商灰掉 · ⚠ 上次失败标 + tooltip · ✓ 有 Key 标 · 成功自动 clear failure · 30 天自动过期清理。试错成本由系统消化</div>
+            <div class="intro-tool-cap">F+17</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">✏️</div>
+            <div class="intro-tool-name">自定义 model ID + 历史记忆</div>
+            <div class="intro-tool-desc">每个 optgroup 末尾「✏️ 填自定义...」触发 prompt 输入任意 ID。解决"hardcode 跟不上厂商发布节奏" + Volcengine ep-xxxxxxxx 自建 endpoint 直接填。持久化跨场景复用</div>
+            <div class="intro-tool-cap">F+17.1</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">📜</div>
+            <div class="intro-tool-name">历史任务全面升级（12 项）</div>
+            <div class="intro-tool-desc">✏️ 编辑后重跑 + 场景/时间 chip 筛选 + 📋 复制输入 + 📥 导出 .md + ⭐ 收藏置顶 + ☑ 选择模式批量删/加项目 + 👁 加载到主区 + 搜索范围切换（输入/结果/讨论）</div>
+            <div class="intro-tool-cap">F+18 · 18.1</div>
+          </div>
+
+          <!-- ===== F+23 增补：F+17 系列收尾 + F+20/21/22 ===== -->
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🔁</div>
+            <div class="intro-tool-name">模型下拉 16 步用户驱动演化</div>
+            <div class="intro-tool-desc">从智能感知 → 自定义 → 删除/永久移除/重置后门反复 → 砍 hardcode → 按 vendor 分组。<strong>13 次用户反馈推着改</strong>，最终落地"机制 > 数据"：hardcode 列表全部移除，用户自填 model ID 永远不过期</div>
+            <div class="intro-tool-cap">F+17 ~ 17.16</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">⏹</div>
+            <div class="intro-tool-name">运行中任务可查看 + 明确停止入口</div>
+            <div class="intro-tool-desc">runningBadge HTML 写了但 0 处切换 visible → 用户找不到"在跑的任务" + "← 返回"按钮实际 abort 但文字不暗示。修：launchTask 显示 / finalizeTask 隐藏 + 按钮改"⏹ 停止并返回"</div>
+            <div class="intro-tool-cap">F+20</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">👁</div>
+            <div class="intro-tool-name">API Key 输入框 👁 显示/隐藏切换</div>
+            <div class="intro-tool-desc">7 个 Key 输入框都是 type=password 无法核对。通用 JS 给所有 input[type=password] 自动加 toggle，0 处改 HTML · 未来加新 Key 自动适配</div>
+            <div class="intro-tool-cap">F+21</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🧩</div>
+            <div class="intro-tool-name">Sprint 4 模块化精细化（-22% app.js）</div>
+            <div class="intro-tool-desc">按 git blame 频率拆 3 块 hot zone：model_picker.js（F+17 16 次改）+ history.js（F+18 改过）+ memory/learning.js。app.js 4498 → 3519 行（-22%）。runMemoryHygiene 等耦合代码不强拆 —— <strong>"完美模块化"是工程师 ego，"够用"是产品判断</strong></div>
+            <div class="intro-tool-cap">F+22.1-3</div>
+          </div>
+        </div>
+
+        <p style="color:var(--text-muted);margin-top:14px;font-size:12.5px">
+          完整迭代过程见 <code>CHANGELOG.md</code> 的 <strong>F+1 ~ F+22 章节</strong>（30+ 个 F+ 编号）· 每条都标注根因数据、副作用评估、配套测试预期。<br/>
+          想读"工程心路"叙事版？见 <code>BLOG.md</code> —— "撤回、复发、与生产对话：MyAgentTeam 6 幕迭代故事"
+        </p>
+      </section>
+
+      <!-- ===== F+19：i18n 双语支持 section ===== -->
+      <section class="intro-section intro-section-new" id="sec-8">
+        <h2>🌐 中英双语 i18n <span class="new-pill">F+14 NEW</span></h2>
+        <p>顶栏右上角 <code>EN</code> 按钮一键切换 —— UI 全英文 + Agent 输出语言运行时切换 + localStorage 持久化用户偏好。下次打开自动按 navigator.language 检测。</p>
+
+        <div class="intro-tool-grid">
+          <div class="intro-tool">
+            <div class="intro-tool-icon">📚</div>
+            <div class="intro-tool-name">340+ keys 完整字典</div>
+            <div class="intro-tool-desc">zh.js / en.js 各 ~340 条，覆盖：顶栏 / 介绍页 / 设置抽屉 / 状态条 / toast / 错误信息（含 22 个分支 vendor error 翻译）/ 任务控制按钮</div>
+            <div class="intro-tool-cap">Phase 1+2+3</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🏷</div>
+            <div class="intro-tool-name">4 种 data-i18n 属性</div>
+            <div class="intro-tool-desc">data-i18n（textContent）· data-i18n-html（innerHTML，含 &lt;a&gt;/&lt;code&gt;/&lt;ul&gt; 复杂段）· data-i18n-placeholder / data-i18n-title（属性）。一次 walkAndTranslate 全 DOM 切换</div>
+            <div class="intro-tool-cap">Phase 2d</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🤖</div>
+            <div class="intro-tool-name">Agent 输出语言运行时注入</div>
+            <div class="intro-tool-desc">不翻译 22 个 prompt（保留 prompt 工程精度）· runAgent 在 system 末尾追加 <code>[IMPORTANT — Output language] Respond in English</code> · 现代旗舰 LLM 完美处理"中文 prompt → 英文输出"</div>
+            <div class="intro-tool-cap">Phase 3</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🛡</div>
+            <div class="intro-tool-name">完全向后兼容</div>
+            <div class="intro-tool-desc">handleApiError 用 <code>et(key, fallback)</code> helper：字典缺失时 fallback 到原中文。i18n 模块未加载时所有调用 noop。零 regression 风险</div>
+            <div class="intro-tool-cap">Phase 3</div>
+          </div>
+        </div>
+
+        <p style="color:var(--text-muted);margin-top:14px;font-size:12.5px">
+          扩展接口：AGENTS[key].systemEn 字段（可选）—— 想彻底翻译某 Agent 时填入即可，fallback 机制自动接管。
+        </p>
+      </section>
+
+      <!-- ===== F+19：工程哲学 section（招聘叙事核心）===== -->
+      <section class="intro-section intro-section-new" id="sec-9">
+        <h2>🧠 工程哲学 · 4 个决策原则 <span class="new-pill">F+18.1 NEW</span></h2>
+        <p>这个项目不只是"做功能"，更是"把每个决策的思考过程留下痕迹"。以下 4 条原则贯穿 F+1 到 F+18.1：</p>
+
+        <div class="intro-tool-grid">
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🔄</div>
+            <div class="intro-tool-name">自我修正闭环</div>
+            <div class="intro-tool-desc">F+17 模型失败自动记忆 → 成功调用自动 clear → 30 天自动过期。<strong>试错成本由系统消化，不该让用户做计算机能做的判断</strong>。同理：F+18 的 starred 排序、自定义 model ID 持久化都遵循这个原则</div>
+            <div class="intro-tool-cap">F+17 · F+18</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">📜</div>
+            <div class="intro-tool-name">服务器原话 > 本地推断</div>
+            <div class="intro-tool-desc">F+14.3 之前：handleApiError 自己猜原因 "请求被拒绝" / "可能是审核"。F+14.3 之后：把 vendor 的 error.message 直接显示。<strong>"友好提示"和"原始信息"应该并存，不是二选一</strong>。1 次抽象救了所有未来 bug 定位</div>
+            <div class="intro-tool-cap">F+14.3</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">↩️</div>
+            <div class="intro-tool-name">撤回不丢脸</div>
+            <div class="intro-tool-desc">F+4 降 TOOL_LOOP_MAX 优化 → F+5 撤回（用户要充分调研）。F+14 honest 接受 CORS 限制 → F+14.1 撤回，做 hybrid 透明代理。<strong>计划好"可以撤回"反而能更激进地尝试</strong>。两次撤回都让架构更好</div>
+            <div class="intro-tool-cap">F+5 · F+14.1</div>
+          </div>
+          <div class="intro-tool">
+            <div class="intro-tool-icon">🛡</div>
+            <div class="intro-tool-name">多 vendor = 自我免疫系统</div>
+            <div class="intro-tool-desc">F+16 修了一个 OpenAI/Claude/Qwen 都宽容掩盖了几个月的 bug —— Phase 2 history.content=[]。<strong>豆包严格按协议校验直接 400 暴露</strong>。如果只支持单厂商，这个 bug 会潜伏到很久以后才在客户端升级时炸出来</div>
+            <div class="intro-tool-cap">F+16</div>
+          </div>
+        </div>
+
+        <p style="color:var(--text-muted);margin-top:14px;font-size:12.5px">
+          完整工程叙事见根目录 <code>BLOG.md</code>（4500 字）· 包含 16 次小修的心路 + 1 次架构换血 + 2 次"撤回"的诚实复盘。
+        </p>
+      </section>
+
+      <section class="intro-section" id="sec-10">
+        <h2 data-i18n="intro.custom.h2">🛠 自定义团队 —— 你的 AI 团队作坊</h2>
+        <p data-i18n="intro.custom.body">觉得 3 个内置场景不够？点首屏「🛠️ 自定义团队」chip 进入团队构建器，完全按你的需求装配（写作 / 分析 / 学习 / 创意 / 反思 / 头脑风暴 等场景预设都内置）：</p>
+        <ul class="intro-bullets">
+          <li data-i18n="intro.custom.bullet.1">1-4 个 Agent：独立命名 + 自定义身份描述（System Prompt）+ 独立选模型 + 独立选颜色</li>
+          <li data-i18n="intro.custom.bullet.2">5 种编排模式可选：顺序 / Pipeline 流水线 / Reflection 反思 / Hub-Spoke 中心辐射 / Multi-phase 多阶段 —— 详见下一节</li>
+          <li data-i18n="intro.custom.bullet.3">团队库：把当前团队命名保存，建多套预案（"周报专用队"、"竞品分析队"、"决策辩论队"），下次下拉一键切换</li>
+          <li data-i18n="intro.custom.bullet.4">模板库：身份描述可保存为可复用的模板（自动放进"我的模板"），跨团队套用</li>
+          <li data-i18n="intro.custom.bullet.5">11 套精选预设一键载入：⚖️ 三方对抗辩论 / 🏛 三方辩论 / 📊 多视角分析 / ✍️ 写作流水线 / 🪞 反思打磨 / 🎙 多专家问诊 / 🎓 苏格拉底学习 / 🔬 四厂商对照 / 🎨 创意三人组 / 💰 经济型团队 / 🧠 深度推理团队</li>
+          <li data-i18n="intro.custom.bullet.6">实时校验：每种模式的角色规则（如多阶段 Phase3 必须=1 / Reflection 必须 creator+critic）在 UI 实时检查，违规无法启动</li>
+        </ul>
+      </section>
+
+      <section class="intro-section" id="sec-11">
+        <h2 data-i18n="intro.modes.h2">🧬 5 种编排模式</h2>
+        <p data-i18n="intro.modes.body">自定义团队提供 5 种 Agent 协作拓扑，每种适配不同任务结构：</p>
+        <div class="intro-modes-grid">
+          <div class="intro-mode">
+            <div class="intro-mode-name" data-i18n="intro.modes.seq.name">顺序（Sequential）</div>
+            <div class="intro-mode-formula" data-i18n="intro.modes.seq.formula">A → B → A → B... 循环 N 轮</div>
+            <div class="intro-mode-use" data-i18n="intro.modes.seq.use">协作讨论 · 辩论 · 反复迭代</div>
+          </div>
+          <div class="intro-mode">
+            <div class="intro-mode-name" data-i18n="intro.modes.pipeline.name">Pipeline 流水线</div>
+            <div class="intro-mode-formula" data-i18n="intro.modes.pipeline.formula">A → B → C → D 线性 1 遍</div>
+            <div class="intro-mode-use" data-i18n="intro.modes.pipeline.use">工序明确：写作流水 / 翻译校对 / 代码生成审查</div>
+          </div>
+          <div class="intro-mode">
+            <div class="intro-mode-name" data-i18n="intro.modes.reflection.name">Reflection 反思</div>
+            <div class="intro-mode-formula" data-i18n="intro.modes.reflection.formula">创作 → 评 → 改 → 评... N 轮</div>
+            <div class="intro-mode-use" data-i18n="intro.modes.reflection.use">单产出反复打磨：文案 / 代码 / 方案</div>
+          </div>
+          <div class="intro-mode">
+            <div class="intro-mode-name" data-i18n="intro.modes.hub.name">Hub-Spoke 中心辐射</div>
+            <div class="intro-mode-formula" data-i18n="intro.modes.hub.formula">中心提问 → N 专家答 → 中心整合</div>
+            <div class="intro-mode-use" data-i18n="intro.modes.hub.use">模糊问题需多视角专家破局</div>
+          </div>
+          <div class="intro-mode">
+            <div class="intro-mode-name" data-i18n="intro.modes.multi.name">多阶段（决策同款）</div>
+            <div class="intro-mode-formula" data-i18n="intro.modes.multi.formula">并行隔离 → 群聊质证 → 独立裁决</div>
+            <div class="intro-mode-use" data-i18n="intro.modes.multi.use">高质量决策：选 A 还是 B / 要不要做</div>
+          </div>
+        </div>
+        <p style="color:var(--text-muted);margin-top:14px" data-i18n="intro.modes.footer1">每种模式至少一套预设演示 —— 直接载入即可看到效果。每种模式的校验规则、Agent 角色字段、提示词模板已内置。</p>
+        <p style="color:var(--text-muted);margin-top:6px;font-size:12px"><strong data-i18n="intro.modes.footer2.label">内置场景与编排模式的对应：</strong>
+          <span data-i18n="intro.modes.footer2.body">规划 → Reflection ｜ 决策 → Multi-phase ｜ 起底 → Multi-phase（其他模式 Pipeline / Sequential / Hub-Spoke 用于自定义团队，含写作 4 工序）</span>
+        </p>
+      </section>
+
+      <section class="intro-section" id="sec-12">
+        <h2 data-i18n="intro.vendor.h2">🌐 6 厂商 · 27 模型</h2>
+        <div class="intro-vendor-grid">
+          <div class="intro-vendor">
+            <div class="intro-vendor-name" data-i18n="intro.vendor.openai.name">OpenAI</div>
+            <div class="intro-vendor-models">gpt-4o-mini · gpt-5-mini · gpt-4o · gpt-5 · o3-mini · o3</div>
+          </div>
+          <div class="intro-vendor">
+            <div class="intro-vendor-name" data-i18n="intro.vendor.anthropic.name">Anthropic</div>
+            <div class="intro-vendor-models">claude-haiku-4-5 · claude-sonnet-4-5 · claude-opus-4-5 · claude-3-5 系列</div>
+          </div>
+          <div class="intro-vendor">
+            <div class="intro-vendor-name" data-i18n="intro.vendor.qwen.name">通义千问（阿里）</div>
+            <div class="intro-vendor-models">qwen3-turbo · qwen3-plus · qwen3-max · qwen-turbo · qwen-plus · qwen-max · qwen-long</div>
+          </div>
+          <div class="intro-vendor">
+            <div class="intro-vendor-name" data-i18n="intro.vendor.deepseek.name">DeepSeek</div>
+            <div class="intro-vendor-models">deepseek-chat（V3）· deepseek-reasoner（R1）</div>
+          </div>
+          <div class="intro-vendor">
+            <div class="intro-vendor-name" data-i18n="intro.vendor.doubao.name">豆包（火山引擎 ARK）</div>
+            <div class="intro-vendor-models">doubao-seed-2.0-lite（32K）· doubao-seed-2.0-pro（256K）· 支持 ep-xxxxxxxx 自定义 endpoint <br/><span style="color:var(--accent);font-size:11px">F+14.1 hybrid 代理：localhost 直连 / 生产走 /api/proxy/ark Edge Function（pass-through，Key 不存 vercel）</span></div>
+          </div>
+          <div class="intro-vendor">
+            <div class="intro-vendor-name" data-i18n="intro.vendor.gemini.name">Google Gemini</div>
+            <div class="intro-vendor-models">gemini-2.5-flash-lite · 2.5-flash · 2.5-pro · 2.0-flash-lite · 2.0-flash</div>
+          </div>
+        </div>
+        <p style="color:var(--text-muted);margin-top:12px">所有模型走<strong>浏览器直连</strong>厂商 API，Key 仅在你本地 localStorage 存储与传输，不经任何中间服务器。你完全控制使用哪些模型、消耗多少 Token。</p>
+      </section>
+
+      <section class="intro-section" id="sec-13">
+        <h2>🔐 隐私与安全</h2>
+        <p>这套产品的底层假设是：<strong>你的数据是你的，不在我的服务器上，也不在任何中间人手里</strong>。</p>
+
+        <div class="intro-security-grid">
+          <div class="intro-security-card">
+            <strong>🛡 零中间服务器</strong>
+            浏览器直连 6 家厂商 API，Key 仅在本地 localStorage 存储与传输，Vercel 只托管静态文件不经手任何 API 调用。
+          </div>
+          <div class="intro-security-card">
+            <strong>🔒 可选 AES-GCM 加密 <span class="new-pill">NEW</span></strong>
+            设置主密码 → PBKDF2 10 万次迭代派生 → AES-GCM 256 位加密 API Keys + 记忆库。会话级密钥缓存 sessionStorage（关浏览器即清）。
+          </div>
+          <div class="intro-security-card">
+            <strong>💉 Prompt 注入防护</strong>
+            用户输入用 <code>&lt;user_input&gt;</code> 标签包裹，prompt 明确要求 Agent 忽略其中的指令性内容。输入长度上限 2000 字。
+          </div>
+          <div class="intro-security-card">
+            <strong>🧼 XSS 防护</strong>
+            所有 Markdown 输出经 DOMPurify 清洗，禁用 script / iframe / on* 危险标签和属性。
+          </div>
+          <div class="intro-security-card">
+            <strong>💰 成本硬熔断</strong>
+            场景 1-5 单任务 $1 / 场景 6 + 自定义 $2，超过即终止并保留已生成内容。每次任务前预估对话框告知预算。
+          </div>
+          <div class="intro-security-card">
+            <strong>👁 Key 永远不进日志</strong>
+            UI / 日志中 Key 全部以 <code>sk-…xxxx</code> mask 显示，避免误传。
+          </div>
+        </div>
+      </section>
+
+      <section class="intro-section" id="sec-14">
+        <h2>📈 工程基建 <span class="new-pill">NEW</span></h2>
+        <p>这不是一个 weekend demo —— 它有 production-grade 的工程基建：</p>
+
+        <div class="intro-eng-grid">
+          <div class="intro-eng-card">
+            <div class="intro-eng-stat">85</div>
+            <div class="intro-eng-label">自动化测试</div>
+            <div class="intro-eng-desc">76 单测 + 9 E2E，覆盖路由 / 记忆 / 加密 / 场景 / 工具。<code>npm test</code> 1.6 秒跑完</div>
+          </div>
+          <div class="intro-eng-card">
+            <div class="intro-eng-stat">2</div>
+            <div class="intro-eng-label">持久化层</div>
+            <div class="intro-eng-desc">localStorage（小数据）+ IndexedDB（KB 文档 / history 归档），自动迁移 > 3MB</div>
+          </div>
+          <div class="intro-eng-card">
+            <div class="intro-eng-stat">7</div>
+            <div class="intro-eng-label">错误友好翻译</div>
+            <div class="intro-eng-desc">401 / 403 / 404 / 413 / 429 / 503 / 网络错 各自有"👉 这样做"建议</div>
+          </div>
+          <div class="intro-eng-card">
+            <div class="intro-eng-stat">∞</div>
+            <div class="intro-eng-label">零厂商锁定</div>
+            <div class="intro-eng-desc">任意时刻可替换/混搭 6 家任一厂商，不必押宝单家</div>
+          </div>
+        </div>
+
+        <div class="intro-eng-tools">
+          <span class="intro-eng-tool">Vitest</span>
+          <span class="intro-eng-tool">Playwright</span>
+          <span class="intro-eng-tool">Web Crypto</span>
+          <span class="intro-eng-tool">IndexedDB</span>
+          <span class="intro-eng-tool">DOMPurify</span>
+          <span class="intro-eng-tool">Vercel</span>
+          <span class="intro-eng-tool">marked.js</span>
+          <span class="intro-eng-tool">SSE / Fetch ReadableStream</span>
+        </div>
+      </section>
+
+      <!-- ===== F+19：vs 别的工具对比表 ===== -->
+      <section class="intro-section intro-section-new" id="sec-compare">
+        <h2>⚖ MyAgentTeam vs 别的 AI 工具</h2>
+        <p>诚实对比，不黑别家。每个工具都有自己的最佳场景；这张表帮你判断 MyAgentTeam 适不适合你的需求。</p>
+
+        <div style="overflow-x:auto;margin-top:14px">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;line-height:1.5">
+            <thead>
+              <tr style="background:rgba(108,140,255,0.10);text-align:left">
+                <th style="padding:10px 12px;border-bottom:2px solid var(--accent);min-width:160px">能力</th>
+                <th style="padding:10px 12px;border-bottom:2px solid var(--accent);text-align:center;min-width:120px;color:var(--accent)"><strong>MyAgentTeam</strong></th>
+                <th style="padding:10px 12px;border-bottom:2px solid var(--accent);text-align:center;min-width:120px">ChatGPT / Claude.ai</th>
+                <th style="padding:10px 12px;border-bottom:2px solid var(--accent);text-align:center;min-width:120px">CrewAI / LangGraph</th>
+                <th style="padding:10px 12px;border-bottom:2px solid var(--accent);text-align:center;min-width:120px">Coze / 扣子</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px"><strong>多 Agent 协作</strong></td>
+                <td style="text-align:center;color:#22c55e">✅ 5 编排模式</td>
+                <td style="text-align:center;color:#ef4444">❌</td>
+                <td style="text-align:center;color:#22c55e">✅ 灵活但要写代码</td>
+                <td style="text-align:center;color:#22c55e">✅ 拖拽式</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px"><strong>跨厂商混合（同任务用不同模型）</strong></td>
+                <td style="text-align:center;color:#22c55e">✅ 6 厂商任意混</td>
+                <td style="text-align:center;color:#ef4444">❌ 锁定单家</td>
+                <td style="text-align:center;color:#22c55e">✅ 但要写 LLM client</td>
+                <td style="text-align:center;color:#facc15">⚠ 主推自家模型</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px"><strong>API Key 由谁存</strong></td>
+                <td style="text-align:center;color:#22c55e">✅ 仅你 localStorage</td>
+                <td style="text-align:center;color:#facc15">⚠ 平台账号</td>
+                <td style="text-align:center;color:#22c55e">✅ 本地 .env</td>
+                <td style="text-align:center;color:#ef4444">❌ 平台保管</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px"><strong>0 后端 / 浏览器直连</strong></td>
+                <td style="text-align:center;color:#22c55e">✅</td>
+                <td style="text-align:center;color:#ef4444">❌</td>
+                <td style="text-align:center;color:#ef4444">❌ 要服务端</td>
+                <td style="text-align:center;color:#ef4444">❌</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px"><strong>开箱即用（0 代码）</strong></td>
+                <td style="text-align:center;color:#22c55e">✅ 浏览器打开就用</td>
+                <td style="text-align:center;color:#22c55e">✅</td>
+                <td style="text-align:center;color:#ef4444">❌ 要写 Python</td>
+                <td style="text-align:center;color:#22c55e">✅ 但限平台</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px"><strong>长程记忆 / 用户画像</strong></td>
+                <td style="text-align:center;color:#22c55e">✅ 5 路记忆 + 自学画像</td>
+                <td style="text-align:center;color:#facc15">⚠ 单轮 memory</td>
+                <td style="text-align:center;color:#facc15">⚠ 需自己实现</td>
+                <td style="text-align:center;color:#facc15">⚠ 工作流变量</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px"><strong>项目空间 / 多任务隔离</strong></td>
+                <td style="text-align:center;color:#22c55e">✅ 无限项目 + 颜色 + 记忆隔离</td>
+                <td style="text-align:center;color:#facc15">⚠ 文件夹</td>
+                <td style="text-align:center;color:#ef4444">❌</td>
+                <td style="text-align:center;color:#22c55e">✅ Workspace</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px"><strong>成本透明度</strong></td>
+                <td style="text-align:center;color:#22c55e">✅ 启动前预估 + 实时面板</td>
+                <td style="text-align:center;color:#ef4444">❌ 订阅制黑箱</td>
+                <td style="text-align:center;color:#22c55e">✅ 你自己买单</td>
+                <td style="text-align:center;color:#facc15">⚠ 平台积分</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px"><strong>历史可重跑/编辑/导出</strong></td>
+                <td style="text-align:center;color:#22c55e">✅ 编辑后重跑 + 批量 + 导出 .md</td>
+                <td style="text-align:center;color:#facc15">⚠ 简单查看</td>
+                <td style="text-align:center;color:#facc15">⚠ 自己写</td>
+                <td style="text-align:center;color:#facc15">⚠ 仅记录</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px"><strong>中英双语 UI</strong></td>
+                <td style="text-align:center;color:#22c55e">✅ 一键切 + Agent 输出语言注入</td>
+                <td style="text-align:center;color:#22c55e">✅</td>
+                <td style="text-align:center;color:#ef4444">❌</td>
+                <td style="text-align:center;color:#22c55e">✅</td></tr>
+              <tr><td style="padding:8px 12px"><strong>学习成本</strong></td>
+                <td style="text-align:center;color:#22c55e">5 分钟（写一句话）</td>
+                <td style="text-align:center;color:#22c55e">立刻</td>
+                <td style="text-align:center;color:#ef4444">数周（Python + LLM 概念）</td>
+                <td style="text-align:center;color:#facc15">1-2 小时（拖拽）</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p style="color:var(--text-muted);margin-top:14px;font-size:12.5px">
+          <strong>不适合 MyAgentTeam 的场景</strong>：① 需要长期持久化对话历史给团队成员共享（用 ChatGPT Team）② 要把 Agent 包装成可调用的 API 端点（用 LangGraph / CrewAI）③ 完全不想接触 API Key（用 Coze / 智谱清言等托管产品）
+        </p>
+      </section>
+
+      <!-- ===== F+19：FAQ 5 问 ===== -->
+      <section class="intro-section intro-section-new" id="sec-faq">
+        <h2>💬 FAQ · 5 个最常被问的问题</h2>
+
+        <details style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px 16px;margin-bottom:8px">
+          <summary style="cursor:pointer;font-weight:600;color:var(--text)">Q1 · 我的 API Key 真的不会上传到任何服务器吗？</summary>
+          <div style="margin-top:10px;line-height:1.7;color:var(--text-muted);font-size:13.5px">
+            <strong>核心承诺</strong>：5 家厂商（OpenAI/Anthropic/Qwen/DeepSeek/Gemini）的 Key 完全本地存储 + 浏览器直连，<strong>Vercel 只托管静态文件不经手任何 API 调用</strong>。<br/><br/>
+            <strong>唯一例外</strong>：豆包 ARK 不开 CORS（厂商决定），生产环境走 <code>/api/proxy/ark</code> Vercel Edge Function 透明代理 —— 但代理纯 pass-through 80 行，<strong>不存 Key、不读 body、不 log</strong>。F+14.1 详见 <code>CHANGELOG.md</code>。<br/><br/>
+            进阶：可选 AES-GCM 256 加密本地存储（PBKDF2 10 万次迭代派生密钥），见隐私 section。
+          </div>
+        </details>
+
+        <details style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px 16px;margin-bottom:8px">
+          <summary style="cursor:pointer;font-weight:600;color:var(--text)">Q2 · 跑一个任务大概要花多少钱？怎么避免烧爆</summary>
+          <div style="margin-top:10px;line-height:1.7;color:var(--text-muted);font-size:13.5px">
+            <strong>典型成本</strong>（用旗舰模型）：决策场景 $0.05-$0.30 · 起底 $0.15-$0.50 · 规划 $0.02-$0.10。用 mini 系列再砍一半。<br/><br/>
+            <strong>防爆 3 层</strong>：① 任务前弹层"成本预估"用户确认 · ② 单任务硬熔断（decision/dossier $5 上限）· ③ 实时面板每 Agent token + cost 累积可见。<br/><br/>
+            <strong>省钱组合</strong>：Phase 1 取证用 mini 模型（gpt-4o-mini / claude-haiku / qwen-turbo）· Phase 3 裁决用旗舰（claude-sonnet-4.5 / gpt-5）。场景 chip ⚙ 可为每 Agent 单独选模型。
+          </div>
+        </details>
+
+        <details style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px 16px;margin-bottom:8px">
+          <summary style="cursor:pointer;font-weight:600;color:var(--text)">Q3 · 为什么选浏览器直连而不是后端代理？</summary>
+          <div style="margin-top:10px;line-height:1.7;color:var(--text-muted);font-size:13.5px">
+            <strong>3 个理由</strong>：<br/>
+            ① <strong>0 凭证存储承诺真实可信</strong> —— 后端代理意味着 Key 要经过服务器，必然涉及"存不存"问题。浏览器直连从源头消除疑问。<br/>
+            ② <strong>0 服务器成本</strong> —— 你跑多少任务花多少厂商的钱，我不在中间烧任何服务器。<br/>
+            ③ <strong>可审计</strong> —— F12 网络面板能看到每次请求直接发到 api.openai.com 等厂商域名，没有中间人。<br/><br/>
+            <strong>代价</strong>：CORS 限制（豆包 ARK 必须走代理，已用 Edge Function 透明代理解决）。
+          </div>
+        </details>
+
+        <details style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px 16px;margin-bottom:8px">
+          <summary style="cursor:pointer;font-weight:600;color:var(--text)">Q4 · 我喜欢的 model ID 列表里没有，或某个 model ID 过期了怎么办？</summary>
+          <div style="margin-top:10px;line-height:1.7;color:var(--text-muted);font-size:13.5px">
+            <strong>F+17.1 已支持</strong>：每个 model 下拉每个厂商 optgroup 末尾有 <code>✏️ 填自定义 model ID...</code> 选项。点击 → 弹 prompt → 输入任意 ID → 持久化复用。<br/><br/>
+            <strong>典型场景</strong>：① 厂商发了新版（如 doubao-seed-1-6-pro-250615）应用还没更新 → 自己填 · ② Volcengine 自建 endpoint <code>ep-xxxxxxxx</code> → 自己填（自动识别为豆包） · ③ 旧 model ID 已下线 → F+17 会给该 model 加 ⚠ 标 + tooltip 显示"上次失败 HTTP 404"。<br/><br/>
+            <strong>自我修正</strong>：成功调用一次的 model 自动从"失败列表"清除 ⚠ 标。
+          </div>
+        </details>
+
+        <details style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px 16px;margin-bottom:8px">
+          <summary style="cursor:pointer;font-weight:600;color:var(--text)">Q5 · 离线能用吗？数据备份怎么搞？</summary>
+          <div style="margin-top:10px;line-height:1.7;color:var(--text-muted);font-size:13.5px">
+            <strong>离线</strong>：UI 完全可加载 + 介绍页/设置/历史查看 100% 工作，但跑 LLM 任务必须联网（厂商 API 在云上）。Tavily 搜索 / Jina Reader 也需联网。<br/><br/>
+            <strong>备份导出</strong>：① 单任务 <code>📥 导出 .md</code>（含原文/Agent/讨论/结果）· ② 整库 <code>设置 → 导出全部 JSON</code>（含 config / history / memory / projects / 自定义团队）· ③ 加密用户可导出加密包。<br/><br/>
+            <strong>跨设备</strong>：把导出的 JSON 在新设备 <code>设置 → 导入</code> 即可。没有云同步（守住 0 后端原则）。
+          </div>
+        </details>
+      </section>
+
+      <section class="intro-section" id="sec-15">
+        <h2>🚀 怎么开始用</h2>
+
+        <h3 class="intro-h3">最快路径 · 3 步</h3>
+        <ol class="intro-bullets">
+          <li>点右上角齿轮 ⚙ → 填入任一厂商的 API Key（不填则全程模拟，能体验完整交互但不调真模型）</li>
+          <li>回到首页，输入框写一句话描述你的任务，或直接点 3 个内置场景中的一个（规划 / 决策 / 起底）</li>
+          <li>看 Agent 实时流式讨论 → 拿结果。任务结束页可"重新生成"或"查看完整讨论"或"导出 Markdown"</li>
+        </ol>
+
+        <h3 class="intro-h3">事实可信路径 · 4 步（推荐用于决策 / 分析 / 写作）</h3>
+        <ol class="intro-bullets">
+          <li>同上 Step 1，先填厂商 Key</li>
+          <li><strong>额外填 Tavily Search Key</strong>（在 <a href="https://app.tavily.com/home" target="_blank" rel="noopener">tavily.com</a> 用 Google 30 秒注册，免费 1000 次/月）</li>
+          <li>启动「决策 / 分析 / 写作」任何一个 → 系统提示 "🔧 F+ 强制启用 web_search"</li>
+          <li>看 Agent 自主搜索 → 每条数据带真实 URL → 拿到事实可追溯的结果</li>
+        </ol>
+
+        <h3 class="intro-h3">进阶路径 · 跨厂商混合</h3>
+        <ul class="intro-bullets">
+          <li><strong>给内置场景换模型</strong>：场景 chip 上的齿轮 ⚙ → 为每个 Agent 单独选模型 → ✨ 标记会出现</li>
+          <li><strong>自定义你的 AI 团队</strong>：首屏点「🛠️ 自定义团队」chip → 团队构建器 → 选编排模式 → 配 Agent 身份 + 选模型 → 启动</li>
+          <li><strong>直接载预设</strong>：进团队构建器后点「📚 浏览内置预设」→ 11 套精选范式（辩论 / 写作流水线 / 反思打磨 / 问诊 / 四厂商对照等）一键载入</li>
+          <li><strong>保存你的团队</strong>：在团队构建器顶部给团队取个名字 → 「💾 保存」入团队库，下次直接切换</li>
+          <li><strong>任务中实时介入</strong>：底部输入框补充信息（"重点放在用户体验" / "别太长"等），最多 3 次，5 种模式下都生效</li>
+        </ul>
+
+        <div class="intro-cta">
+          <button id="introStartBtn2" class="primary-btn">立即开始 ▸</button>
+        </div>
+      </section>
+    </section>
+
+    <!-- ========== 启动卡片（首屏） ========== -->
+    <section id="welcome" class="welcome">
+      <h1 class="welcome-title" data-i18n="welcome.title">用一句话指挥你的 AI 团队</h1>
+      <p class="welcome-sub" data-i18n="welcome.sub">3 分钟完成首个多 Agent 协作 · 3 个开箱即用场景</p>
+
+      <div class="composer" id="composer">
+        <textarea id="userInput" rows="3" maxlength="2000"
+          data-i18n-placeholder="welcome.composer.placeholder"
+          placeholder="告诉我你想做什么…（例：帮我写一份技术周报 / 该选 React 还是 Vue / 分析这个产品的竞品）"></textarea>
+        <div class="composer-bar">
+          <div class="composer-meta">
+            <span id="charCount">0 / 2000</span>
+            <span id="routeHint" class="route-hint"></span>
+          </div>
+          <button id="sendBtn" class="primary-btn" data-i18n="welcome.send">启动 ▸</button>
+        </div>
+      </div>
+
+      <div class="scenes">
+        <div class="scenes-label" data-i18n="welcome.scenes.label">或直接选择场景：</div>
+        <div class="scenes-grid">
+          <div class="scene-chip" data-scene="planning">
+            <span class="scene-icon">📋</span>
+            <span class="scene-name" data-i18n="scene.planning.name">规划</span>
+            <span class="scene-agents" data-i18n="scene.planning.desc">Reflection · PM 拟 ⇄ 顾问评</span>
+            <span class="scene-config-trigger" data-config-scene="planning" data-i18n-title="welcome.scene.config_title" title="为每个 Agent 单独选模型">⚙</span>
+            <span class="scene-customized-badge" data-badge-scene="planning">✨</span>
+          </div>
+          <div class="scene-chip" data-scene="decision">
+            <span class="scene-icon">⚖️</span>
+            <span class="scene-name" data-i18n="scene.decision.name">决策</span>
+            <span class="scene-agents" data-i18n="scene.decision.desc">3 信息 Agent + 协调</span>
+            <span class="scene-config-trigger" data-config-scene="decision" data-i18n-title="welcome.scene.config_title" title="为每个 Agent 单独选模型">⚙</span>
+            <span class="scene-customized-badge" data-badge-scene="decision">✨</span>
+          </div>
+          <div class="scene-chip" data-scene="dossier">
+            <span class="scene-icon">🔍</span>
+            <span class="scene-name" data-i18n="scene.dossier.name">起底</span>
+            <span class="scene-agents" data-i18n="scene.dossier.desc">3 搜证 Agent + 档案整理（人/物/事 客观档案）</span>
+            <span class="scene-config-trigger" data-config-scene="dossier" data-i18n-title="welcome.scene.config_title" title="为每个 Agent 单独选模型">⚙</span>
+            <span class="scene-customized-badge" data-badge-scene="dossier">✨</span>
+          </div>
+          <div class="scene-chip scene-chip-accent" data-scene="custom">
+            <span class="scene-icon">🛠️</span>
+            <span class="scene-name" data-i18n="scene.custom.name">自定义团队</span>
+            <span class="scene-agents" data-i18n="welcome.scene.custom.agents">编辑 Agent 身份 + 模型</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="security-banner">
+        <strong data-i18n="welcome.security_banner.label">V1 安全声明：</strong><span data-i18n="welcome.security_banner.body">API Key 以明文形式存储于您的浏览器 localStorage，请勿在公共设备使用。无 Key 时进入模拟模式，可体验完整流程。</span>
+      </div>
+    </section>
+
+    <!-- ========== 自定义团队构建器 ========== -->
+    <section id="teamBuilder" class="team-builder hidden">
+      <div class="task-header">
+        <button id="teamBackBtn" class="ghost-btn">← 返回</button>
+        <div class="task-title">
+          <span>🛠️</span>
+          <span>自定义协作团队</span>
+        </div>
+        <div class="result-actions">
+          <button id="teamResetBtn" class="ghost-btn">恢复默认</button>
+          <button id="teamLaunchBtn" class="primary-btn">下一步：输入任务 ▸</button>
+        </div>
+      </div>
+
+      <div class="team-builder-body">
+        <div class="team-library-bar">
+          <div class="team-library-row">
+            <label>当前团队</label>
+            <input type="text" id="teamNameInput" placeholder="给这个团队起个名字..." maxlength="30" />
+            <button id="teamSaveBtn" class="ghost-btn" title="保存当前配置到团队库">💾 保存</button>
+          </div>
+          <div class="team-library-row">
+            <label>切换团队</label>
+            <select id="teamLibrarySelect">
+              <option value="">— 未保存 / 新建中 —</option>
+            </select>
+            <button id="teamLoadBtn" class="ghost-btn">📂 载入</button>
+            <button id="teamDeleteBtn" class="ghost-btn" title="删除选中的团队">🗑 删除</button>
+          </div>
+          <div class="team-library-row">
+            <label>多模型范式</label>
+            <button id="teamPresetBtn" class="ghost-btn" style="flex:1;text-align:left">📚 浏览内置预设（8 套精选搭配）…</button>
+          </div>
+        </div>
+
+        <div class="team-meta">
+          <div class="field-inline">
+            <label>编排模式</label>
+            <select id="teamMode">
+              <option value="sequential">顺序模式 · N 轮轮流发言（循环式讨论）</option>
+              <option value="pipeline">Pipeline 流水线 · 工序线性传递（每 Agent 只发言 1 次）</option>
+              <option value="reflection">Reflection 反思 · 创作者 + 评论者迭代</option>
+              <option value="hub-spoke">Hub-Spoke 中心辐射 · 中心提问 + 多专家答 + 中心整合</option>
+              <option value="multi-phase">多阶段 · 并行隔离 → 群聊质证 → 独立裁决</option>
+            </select>
+          </div>
+          <div class="field-inline" id="teamRoundsRow">
+            <label>讨论轮次</label>
+            <input type="number" id="teamRounds" min="1" max="10" value="4" />
+            <span class="field-hint">每个 Agent 在每轮发言一次（总发言数 = 轮次 × Agent 数）</span>
+          </div>
+          <div id="teamPhaseHint" class="phase-hint" style="display:none">
+            <strong>多阶段规则：</strong>
+            Phase 1 ≥ 1 Agent（并行独立取证，互相不可见）·
+            Phase 2 ≥ 0 Agent（共 2 轮交叉质证，可看到 Phase 1 全部输出）·
+            Phase 3 必须 = 1 Agent（独立裁决，结构化输出）。
+          </div>
+        </div>
+
+        <div id="teamAgentList" class="team-agent-list">
+          <!-- Agent 卡片由 JS 动态渲染 -->
+        </div>
+
+        <div class="team-add-row">
+          <button id="teamAddBtn" class="ghost-btn">＋ 增加 Agent（最多 4 个）</button>
+        </div>
+
+        <div class="team-tips">
+          <strong>使用提示：</strong>
+          <ul>
+            <li>每个 Agent 可独立选择厂商和模型 —— 例如「研究员」用便宜的 qwen-turbo 搜集事实，「编辑」用 gpt-4o 做精细润色</li>
+            <li>身份描述（system prompt）决定 Agent 的角色定位 —— 越具体越好，可点旁边的「示例」一键填入参考模板</li>
+            <li>如果某个 Agent 使用的模型没配 Key，会自动走模拟模式（不影响其他 Agent 用真实 API）</li>
+            <li>团队配置保存在本地浏览器，下次打开自动恢复</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 自定义任务输入弹层 ========== -->
+    <div id="customPromptMask" class="modal-mask hidden">
+      <div class="modal">
+        <header class="modal-header">输入任务描述</header>
+        <div class="modal-body">
+          <p>请描述你希望团队完成的任务：</p>
+          <textarea id="customPromptText" rows="4" maxlength="2000"
+            style="width:100%;background:var(--bg-elev-2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:inherit;"
+            placeholder="例如：帮我设计一个产品冷启动方案"></textarea>
+        </div>
+        <footer class="modal-footer">
+          <button class="ghost-btn" id="customPromptCancelBtn">取消</button>
+          <button class="primary-btn" id="customPromptOkBtn">启动</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ========== 任务运行区 ========== -->
+    <section id="task" class="task hidden">
+      <div class="task-header">
+        <button id="backBtn" class="ghost-btn" title="停止任务并返回首页（abort 所有正在跑的 Agent）">⏹ 停止并返回</button>
+        <div class="task-title">
+          <span id="taskSceneIcon">📝</span>
+          <span id="taskSceneName">写作场景</span>
+          <span class="task-status-badge" id="taskStatusBadge">运行中</span>
+        </div>
+        <div class="task-progress">
+          <span id="progressText">已进行 0/4 轮</span>
+          <button id="pauseBtn" class="ghost-btn small">⏸ 暂停</button>
+        </div>
+      </div>
+
+      <div class="task-body">
+        <div class="discussion" id="discussion">
+          <!-- Agent 消息会被注入此处 -->
+        </div>
+        <aside class="sidebar">
+          <div class="sidebar-card">
+            <div class="sidebar-card-title">💰 实时成本</div>
+            <div class="cost-row"><span>输入 Token</span><span id="costInputTokens">0</span></div>
+            <div class="cost-row"><span>输出 Token</span><span id="costOutputTokens">0</span></div>
+            <div class="cost-row"><span>累计费用</span><span id="costUsd">$0.0000</span></div>
+            <div class="cost-bar"><div id="costBar" class="cost-bar-fill"></div></div>
+            <div class="cost-cap" id="costCap">熔断线 $1.00</div>
+          </div>
+          <div class="sidebar-card">
+            <div class="sidebar-card-title">👥 Agent 拆解</div>
+            <div id="agentBreakdown" class="agent-breakdown"></div>
+          </div>
+          <div class="sidebar-card" id="phaseCard" style="display:none">
+            <div class="sidebar-card-title">🎯 决策场景阶段</div>
+            <div id="phaseList" class="phase-list"></div>
+          </div>
+        </aside>
+      </div>
+
+      <div class="intervention" id="intervention">
+        <div class="intervention-meta">
+          <span>💬 介入次数 <span id="interventionCount">0</span>/3</span>
+          <span id="interventionHint" class="intervention-hint"></span>
+        </div>
+        <div class="intervention-input">
+          <input type="text" id="interventionText" maxlength="500"
+            placeholder="补充信息或调整方向…（例：重点放在用户体验上）" />
+          <button id="interventionSendBtn" class="ghost-btn">发送</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 结果区 ========== -->
+    <section id="result" class="result hidden">
+      <div class="result-header">
+        <button id="resultBackBtn" class="ghost-btn">← 返回</button>
+        <h2 id="resultTitle">✅ 任务完成</h2>
+        <div class="result-actions">
+          <button id="regenerateBtn" class="ghost-btn">🔄 重新生成</button>
+          <button id="viewDiscussionBtn" class="ghost-btn">📜 查看讨论</button>
+          <button id="exportMdBtn" class="ghost-btn">📥 导出 Markdown</button>
+          <button id="copyResultBtn" class="primary-btn">复制结果</button>
+        </div>
+      </div>
+      <div class="result-body">
+        <article id="resultContent" class="result-content markdown"></article>
+        <aside class="result-meta" id="resultMeta"></aside>
+      </div>
+    </section>
+  </main>
+
+  <!-- ========== 设置抽屉 ========== -->
+  <div id="drawerMask" class="drawer-mask hidden"></div>
+  <aside id="drawer" class="drawer hidden">
+    <header class="drawer-header">
+      <h2 data-i18n="settings.title">设置</h2>
+      <button class="ghost-btn" id="drawerCloseBtn" data-i18n-title="settings.close" title="关闭">×</button>
+    </header>
+    <div class="drawer-body">
+      <div class="field">
+        <label data-i18n="settings.openai.label">OpenAI API Key</label>
+        <div class="input-row">
+          <input type="password" id="openaiKey" placeholder="sk-..." autocomplete="off" />
+          <span class="input-badge" id="openaiBadge"></span>
+        </div>
+        <div class="field-hint" data-i18n="settings.openai.hint">前端正则校验：sk- 开头，长度 ≥ 20</div>
+      </div>
+      <div class="field">
+        <label data-i18n="settings.anthropic.label">Anthropic API Key（可选）</label>
+        <div class="input-row">
+          <input type="password" id="anthropicKey" placeholder="sk-ant-..." autocomplete="off" />
+          <span class="input-badge" id="anthropicBadge"></span>
+        </div>
+      </div>
+      <div class="field">
+        <label data-i18n="settings.qwen.label">通义千问 DashScope API Key（可选）</label>
+        <div class="input-row">
+          <input type="password" id="qwenKey" placeholder="sk-..." autocomplete="off" />
+          <span class="input-badge" id="qwenBadge"></span>
+        </div>
+        <div class="field-hint" data-i18n-html="settings.qwen.hint">在 <a href="https://dashscope.console.aliyun.com/apiKey" target="_blank" rel="noopener">DashScope 控制台</a> 获取</div>
+      </div>
+      <div class="field">
+        <label data-i18n="settings.deepseek.label">DeepSeek API Key（可选）</label>
+        <div class="input-row">
+          <input type="password" id="deepseekKey" placeholder="sk-..." autocomplete="off" />
+          <span class="input-badge" id="deepseekBadge"></span>
+        </div>
+        <div class="field-hint" data-i18n-html="settings.deepseek.hint">在 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">DeepSeek 平台</a> 获取</div>
+      </div>
+      <div class="field">
+        <label data-i18n="settings.doubao.label">豆包 火山引擎 ARK API Key（可选）</label>
+        <div class="input-row">
+          <input type="password" id="doubaoKey" placeholder="ARK 访问密钥..." autocomplete="off" />
+          <span class="input-badge" id="doubaoBadge"></span>
+        </div>
+        <div class="field-hint" data-i18n-html="settings.doubao.hybrid" style="background:rgba(108,140,255,0.08);border-left:3px solid var(--accent);padding:8px 10px;margin:6px 0;border-radius:4px">
+          <strong>💡 F+14.1 hybrid 透明代理</strong>：豆包 ARK 不开 CORS。本应用自动适配：
+          <ul style="margin:6px 0 0;padding-left:20px">
+            <li><strong>localhost 开发</strong>：浏览器直连 ARK</li>
+            <li><strong>生产环境</strong>：自动走 same-origin <code>/api/proxy/ark</code> Edge Function（纯 pass-through，Key 不存 vercel，仅做 CORS 桥接）</li>
+            <li>所有环境对你透明，不需做任何配置</li>
+          </ul>
+        </div>
+        <div class="field-hint">
+          在 <a href="https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey" target="_blank" rel="noopener">火山方舟控制台</a> 获取 Key。
+          <details style="margin-top:6px">
+            <summary data-i18n="settings.doubao.permission.summary" style="cursor:pointer;color:var(--accent);user-select:none">⚠ 模型权限要求 + 方法 A/B 说明（点击展开）</summary>
+            <div data-i18n-html="settings.doubao.permission.body" style="margin-top:8px">
+              <strong>⚠ 关键：API Key 必须勾选模型权限</strong> —— 创建 Key 时选「自定义权限策略」→ <code>Model ID</code> tab → 勾选 <code>Doubao-Seed-2.0-pro</code> 和 <code>Doubao-Seed-2.0-lite</code>（或全选）。
+              <br/><br/>
+              <strong>方法 A（推荐）</strong>：直接用 model ID 调用 —— 已内置 <code>doubao-seed-2-0-pro-260215</code> / <code>doubao-seed-2-0-lite-260428</code>，无需额外配置。
+              <br/><br/>
+              <strong>方法 B（高级）</strong>：自建 Endpoint 用 <code>ep-xxxxxxxx</code> —— 到 <a href="https://console.volcengine.com/ark/region:ark+cn-beijing/endpoint" target="_blank" rel="noopener">在线推理</a> 创建接入点，拿到 <code>ep-xxxxxxxx</code>，在<strong>自定义团队</strong> Agent 卡片的 model 字段直接填（自动识别为豆包）。
+            </div>
+          </details>
+        </div>
+      </div>
+      <div class="field">
+        <label data-i18n="settings.gemini.label">Google Gemini API Key（可选）</label>
+        <div class="input-row">
+          <input type="password" id="geminiKey" placeholder="AIza..." autocomplete="off" />
+          <span class="input-badge" id="geminiBadge"></span>
+        </div>
+        <div class="field-hint" data-i18n-html="settings.gemini.hint">在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> 获取</div>
+      </div>
+      <div class="field">
+        <label data-i18n="settings.tavily.label">🔧 Tavily Search API Key（联网搜索工具）</label>
+        <div class="input-row">
+          <input type="password" id="tavilyKey" placeholder="tvly-..." autocomplete="off" />
+          <span class="input-badge" id="tavilyBadge"></span>
+        </div>
+        <div class="field-hint" data-i18n-html="settings.tavily.hint">用于 Agent 联网搜索（Tier 1 工具）。在 <a href="https://app.tavily.com/home" target="_blank" rel="noopener">Tavily 平台</a> 用 Google/邮箱注册即得，免费 1000 次/月，全球可用。</div>
+      </div>
+      <div class="field-check">
+        <input type="checkbox" id="toolsEnabledGlobal" />
+        <label for="toolsEnabledGlobal" data-i18n="settings.tools.global.label">🛠️ 内置场景允许 Agent 调用工具（web_search / web_fetch / date_now）</label>
+      </div>
+      <div class="field">
+        <label data-i18n="settings.default.model.label">内置场景默认模型</label>
+        <!-- F+17.13：动态生成（buildModelOptgroups），跟 Agent 配置下拉一致体验（自定义/管理/智能感知） -->
+        <select id="defaultModel"></select>
+        <div class="field-hint" id="defaultModelHint"></div>
+        <div class="field-hint" style="color:var(--text-dim)">
+          仅用于 6 个内置场景（写作 / 分析 / 规划 / 学习 / 创意 / 决策）。
+          <strong>自定义团队不受此影响</strong> —— 每个 Agent 在团队构建器里独立选择模型。
+        </div>
+      </div>
+      <div class="field-check">
+        <input type="checkbox" id="rememberConfig" checked />
+        <label for="rememberConfig">记住我的配置（localStorage）</label>
+      </div>
+
+      <div class="field" id="projectSpaceField">
+        <label>📁 项目空间 <span style="font-size:11px;font-weight:normal;color:var(--text-muted)">F+11</span></label>
+        <div class="field-hint" style="margin-bottom:8px">
+          每个项目独立隔离 📌 项目上下文 / 👤 用户画像 / 🧠 Agent 记忆。历史任务按 projectId 过滤显示。
+        </div>
+        <div id="projectListContainer" style="display:flex;flex-direction:column;gap:6px"></div>
+        <button id="newProjectBtn" class="ghost-btn small" style="margin-top:8px">+ 新建项目</button>
+      </div>
+
+      <div class="field">
+        <label>📌 项目上下文（注入到每个 Agent 的开头）</label>
+        <textarea id="projectContextInput" rows="4" maxlength="500"
+          placeholder="例：我是做 B2B SaaS 创业的产品经理，目标客户是中小企业，产品 alpha 阶段。习惯用 Markdown 输出、不要太长。"></textarea>
+        <div class="field-hint">
+          <span id="projectContextCounter">0 / 500</span> ·
+          每次任务每个 Agent 会读到这段。改这里 = 一次性影响所有未来任务。
+        </div>
+      </div>
+
+      <div class="field">
+        <label>💭 记忆系统开关</label>
+        <label class="field-check"><input type="checkbox" id="memEnableProjectContext" checked/><span>📌 启用项目上下文</span></label>
+        <label class="field-check"><input type="checkbox" id="memEnableUserProfile" checked/><span>👤 启用用户画像（自动学习）</span></label>
+        <label class="field-check"><input type="checkbox" id="memEnableAutoRelate"/><span>🔗 启用跨任务自动关联推荐（默认关）</span></label>
+        <label class="field-check"><input type="checkbox" id="memEnableKnowledgeBase" checked/><span>📂 启用知识库召回</span></label>
+        <label class="field-check"><input type="checkbox" id="memEnableAgentMemory"/><span>🧠 启用 Per-Agent 记忆（默认关·成本高）</span></label>
+        <div class="field-hint">关闭的项目不会注入 Token、不消耗费用。</div>
+      </div>
+
+      <div class="field">
+        <label>👤 我的画像（自动学到的事实）</label>
+        <div id="userProfileList" class="user-profile-list"></div>
+      </div>
+
+      <div class="field">
+        <label>🧠 Agent 个体记忆</label>
+        <div id="agentMemoryList" class="user-profile-list"></div>
+      </div>
+
+      <div class="field">
+        <label>📂 我的知识库（RAG）</label>
+        <div id="kbDocList" class="user-profile-list"></div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <input type="file" id="kbFilePicker" accept=".txt,.md,.markdown" style="display:none"/>
+          <button class="ghost-btn" id="kbUploadBtn">📤 上传 .txt / .md</button>
+          <span class="field-hint" style="flex:1">单文件 ≤ 500KB，关键词召回 top 3 注入</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>💰 记忆 Token 预算</label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="range" id="memBudgetSlider" min="0" max="3000" step="100" value="1500" style="flex:1"/>
+          <span id="memBudgetValue" style="min-width:80px;text-align:right;font-variant-numeric:tabular-nums">1500 tk</span>
+        </div>
+        <div class="field-hint">记忆注入的 token 总预算。超出按优先级裁剪（项目上下文 > 用户画像 > 引用任务 > 知识库 > Agent 记忆）。</div>
+      </div>
+
+      <div class="field">
+        <label>🛡 隐私控制</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <button class="ghost-btn" id="exportMemoryBtn">📤 导出记忆 JSON</button>
+          <button class="ghost-btn" id="importMemoryBtn">📥 导入记忆 JSON</button>
+          <input type="file" id="importMemoryPicker" accept=".json" style="display:none"/>
+          <button class="ghost-btn" id="clearAllMemoryBtn" style="color:var(--danger)">🗑 清空全部记忆</button>
+        </div>
+        <div class="field-hint">导出 = 备份到本地文件 · 导入 = 跨设备迁移 · 清空 = 删项目上下文 + 画像 + Agent 记忆 + 知识库 + 项目列表</div>
+      </div>
+      <div class="security-note">
+        <strong>⚠️ 安全声明</strong>
+        <ul>
+          <li>API Key 明文存储于本地 localStorage</li>
+          <li>不要在公共设备使用</li>
+          <li>密钥仅在浏览器 → LLM 厂商之间传输</li>
+          <li>日志/UI 中 Key 始终以 sk-…xxxx 形式显示</li>
+        </ul>
+      </div>
+      <div class="drawer-footer">
+        <button class="primary-btn" id="saveConfigBtn">保存配置</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ========== 通用对话框 ========== -->
+  <div id="modalMask" class="modal-mask hidden">
+    <div class="modal" id="modal">
+      <header class="modal-header" id="modalHeader"></header>
+      <div class="modal-body" id="modalBody"></div>
+      <footer class="modal-footer" id="modalFooter"></footer>
+    </div>
+  </div>
+
+  <!-- ========== Toast 容器 ========== -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="app.js?v=f24-0"></script>
+  <!-- F+13 Sprint 1.5/C: 浏览器内 smoke test runner，URL 加 ?test=1 触发 -->
+  <script>
+    (function() {
+      if (new URLSearchParams(location.search).get('test') !== '1') return;
+      const load = (src) => new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+      window.addEventListener('load', async () => {
+        try {
+          await load('src/test/runner.js?v=f24-0');
+          await load('src/test/smoke.js?v=f24-0');
+          await new Promise(r => setTimeout(r, 300));
+          await MAT_TEST.run();
+        } catch (e) {
+          console.error('[MAT_TEST] runner failed to load:', e);
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

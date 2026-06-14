@@ -1,0 +1,20 @@
+# Vercel
+.vercel
+
+# Dependencies
+node_modules/
+
+# Test artifacts
+test-results/
+playwright-report/
+.playwright/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+
+# Local env / secrets（双保险：本项目 Key 只存浏览器 localStorage，不应有 .env，但防御性排除）
+.env
+.env.local
+*.key
