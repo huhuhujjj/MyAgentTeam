@@ -70,8 +70,13 @@ window.MAT_VENDOR = (function() {
    * @param {string} model
    * @returns {boolean}
    */
+  function remoteMeta(model) {
+    if (!model || !window.MAT_MODEL_DISCOVERY) return null;
+    try { return MAT_MODEL_DISCOVERY.getModelMeta(model); } catch (e) { return null; }
+  }
+
   function isExpensiveModel(model) {
-    const p = MODEL_PRICING[model];
+    const p = MODEL_PRICING[model] || (remoteMeta(model) || {}).pricing;
     return p ? (p.out >= 10) : false;
   }
 
@@ -100,7 +105,9 @@ window.MAT_VENDOR = (function() {
    * @returns {Vendor|null}
    */
   function getModelVendor(model) {
-    return (MODEL_PRICING[model] || {}).vendor || inferVendor(model);
+    return (MODEL_PRICING[model] || {}).vendor
+      || (remoteMeta(model) || {}).vendor
+      || inferVendor(model);
   }
 
   /**
@@ -110,7 +117,10 @@ window.MAT_VENDOR = (function() {
    */
   function getModelContextWindow(model) {
     if (!model) return 32000;
+    const remote = remoteMeta(model);
+    if (remote && remote.ctx) return remote.ctx;
     if (MODEL_PRICING[model]?.contextWindow) return MODEL_PRICING[model].contextWindow;
+    if (MODEL_PRICING[model]?.ctx) return MODEL_PRICING[model].ctx;
     const m = String(model).toLowerCase();
     // OpenAI 系列
     if (m.includes('gpt-5')) return 256000;

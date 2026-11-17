@@ -19,10 +19,15 @@ window.MAT_STORAGE = (function() {
   'use strict';
   const C = MAT_CONSTANTS;
 
+  // 透明加密：若已启用加密且会话密钥可用，config 以 ENC1: 密文落盘；否则明文。
+  // writeEncryptedJSON 自身兼容未启用加密的情形（直接明文写），因此这里无需分支。
   function saveConfig() {
     if (!state.config.remember) {
       localStorage.removeItem(C.STORAGE_KEY);
       return;
+    }
+    if (window.MAT_ENCRYPTION && typeof MAT_ENCRYPTION.writeEncryptedJSON === 'function') {
+      return MAT_ENCRYPTION.writeEncryptedJSON(C.STORAGE_KEY, state.config);
     }
     localStorage.setItem(C.STORAGE_KEY, JSON.stringify(state.config));
   }
@@ -60,6 +65,9 @@ window.MAT_STORAGE = (function() {
   }
 
   function saveMemory() {
+    if (window.MAT_ENCRYPTION && typeof MAT_ENCRYPTION.writeEncryptedJSON === 'function') {
+      return MAT_ENCRYPTION.writeEncryptedJSON(C.MEMORY_KEY, state.memory);
+    }
     localStorage.setItem(C.MEMORY_KEY, JSON.stringify(state.memory));
   }
 
@@ -70,6 +78,9 @@ window.MAT_STORAGE = (function() {
 
   function saveProjectMemory() {
     try {
+      if (window.MAT_ENCRYPTION && typeof MAT_ENCRYPTION.writeEncryptedJSON === 'function') {
+        return MAT_ENCRYPTION.writeEncryptedJSON(C.MEMORY_BY_PROJECT_KEY, state.memoryByProject || {});
+      }
       localStorage.setItem(C.MEMORY_BY_PROJECT_KEY, JSON.stringify(state.memoryByProject || {}));
     } catch (e) {
       console.warn('saveProjectMemory failed', e);

@@ -5,9 +5,10 @@ let sb;
 beforeAll(() => { sb = makeSandbox(); });
 
 describe('SCENE_FLOWS 完整性', () => {
-  it('6 个场景全在', () => {
+  // F+ 迭代新增 dossier（起底）场景，SCENE_FLOWS 现为 7 个
+  it('7 个场景全在', () => {
     expect(Object.keys(sb.SCENE_FLOWS).sort()).toEqual(
-      ['analysis', 'creative', 'decision', 'learning', 'planning', 'writing']
+      ['analysis', 'creative', 'decision', 'dossier', 'learning', 'planning', 'writing']
     );
   });
 

@@ -5,6 +5,37 @@
 
 ---
 
+## F+25 · 2026-11-17（测试修复 · 加密默认引导 · 文档校正）
+
+### 🐛 测试基础设施修复（71 失败 → 77 全绿）
+- `tests/setup.js` / `setup.mjs`：沙盒改为按 `index.html` 顺序加载全部 `src/` IIFE 模块，修复 `MAT_UTILS is not defined` 导致的连锁失败。
+- 新增 `tests/globals.js`：平铺 `MAT_*` 命名空间为裸名 + 提取 app.js 顶层词法常量；桥接 F+11 项目隔离记忆与旧测试的 `state.memory.*` 写法。
+- 增强 DOM 桩（`getElementById` 返回元素桩、补 `scrollTo`），修复渲染函数与 async init 的误报。
+- 更新过时断言：路由聚焦后仅 规划/决策/起底 参与自动路由；`SCENE_FLOWS` 新增 dossier 场景（6→7）。
+
+### ⭐ 加密改为默认引导开启（可跳过）
+- 首次保存真实 API Key 且未加密时，引导设置主密码（AES-GCM 256 / PBKDF2 10 万次），可跳过并明确提示明文风险。
+- **修复断裂的加密链路**：`saveConfig/saveMemory/saveProjectMemory` 改走 `writeEncryptedJSON`；`loadConfig` 改 async 并经 `readEncryptedJSON` 透明解密；init 先恢复会话密钥。
+- 设置面板新增「🔒 本地数据加密」区：状态显示 + 设置密码 / 关闭加密按钮，安全声明改为动态显示存储方式。
+- 新增 `ENC_ONBOARDING_KEY` 引导标记，避免重复打扰。
+- 验证：填 Key→加密落盘(`ENC1:`)→刷新自动解密→清会话弹解锁→错误密码拒绝→正确密码恢复，全链路通过。
+
+### 📝 文档校正
+- DESIGN_DOC §20：移除已完成的两条短板（测试覆盖、prompt 写死）；prompt 可配置功能确认早已实现（场景配置弹窗内每 Agent 可编辑 System Prompt）。
+- 注：Agent prompt 用户自定义、动态模型发现均为既有/前序功能，本次核对确认其完整性。
+
+## F+23 · 2026-11-17（动态模型发现）
+
+### ⭐ 动态模型发现
+- 新增 `src/llm/model_discovery.js`：保存 Key 后拉取 OpenAI / Anthropic / Qwen / DeepSeek / Gemini 的 `/v1/models`，归一化、过滤非对话与退役模型、按创建时间排序。
+- 新增 `api/models.js` Vercel Edge 同源代理：白名单 vendor、透传 Key、不存储不记录；本地静态服务器下自动降级为浏览器直连。
+- `src/ui/model_picker.js`：下拉合并「用户自定义 ⭐ / 厂商实时 🆕 / 内置兜底」三层来源，用户自定义始终优先；即将停用标 ⚠，退役模型隐藏。
+- 新增设置面板「🔄 刷新模型列表」按钮与状态提示；配置保存后自动后台同步；结果缓存到 `myAgentTeam.modelCatalog`（TTL 24h），失败保留缓存。
+- `src/lib/vendor.js` 的上下文窗口 / 价格 / vendor 推断现在优先读取远程元数据，静态表降级为兜底。
+- 新增常量 `MODEL_CATALOG_KEY`，更新 README / ARCHITECTURE 文档。
+
+---
+
 ## F+24 · 2026-06-06（历史"重跑陷阱"修复 + README 定位声明）
 
 ### 🐛 重跑陷阱（最终评估中点名的真 bug）

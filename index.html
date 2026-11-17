@@ -11,35 +11,36 @@
   <!-- F+13 Sprint 1: 拆分模块 · 必须在 app.js 之前加载 -->
   <!-- 加载顺序：utils/vendor/constants 无 cross 依赖 · storage 依赖 constants -->
   <!-- F+13 Sprint 3: types.js 在最前面加载，让 @typedef 全局生效 -->
-  <script src="src/types/types.js?v=f24-0"></script>
+  <script src="src/types/types.js?v=f24-1"></script>
   <!-- F+13 Sprint 1.5/A pilot 已回滚：type="module" 是 deferred，破坏后续 plain script 依赖链 -->
-  <script src="src/lib/utils.js?v=f24-0"></script>
-  <script src="src/lib/vendor.js?v=f24-0"></script>
-  <script src="src/lib/constants.js?v=f24-0"></script>
-  <script src="src/state/state.js?v=f24-0"></script>
-  <script src="src/persist/storage.js?v=f24-0"></script>
-  <script src="src/persist/encryption.js?v=f24-0"></script>
-  <script src="src/persist/indexeddb.js?v=f24-0"></script>
-  <script src="src/state/kb.js?v=f24-0"></script>
-  <script src="src/scenes/scene_config.js?v=f24-0"></script>
-  <script src="src/llm/stream.js?v=f24-0"></script>
-  <script src="src/llm/llm.js?v=f24-0"></script>
-  <script src="src/state/store.js?v=f24-0"></script>
-  <script src="src/tools/tools.js?v=f24-0"></script>
-  <script src="src/scenes/agents.js?v=f24-0"></script>
-  <script src="src/llm/simulated.js?v=f24-0"></script>
-  <script src="src/ui/render.js?v=f24-0"></script>
+  <script src="src/lib/utils.js?v=f24-1"></script>
+  <script src="src/lib/vendor.js?v=f24-1"></script>
+  <script src="src/lib/constants.js?v=f24-1"></script>
+  <script src="src/state/state.js?v=f24-1"></script>
+  <script src="src/persist/storage.js?v=f24-1"></script>
+  <script src="src/persist/encryption.js?v=f24-1"></script>
+  <script src="src/persist/indexeddb.js?v=f24-1"></script>
+  <script src="src/state/kb.js?v=f24-1"></script>
+  <script src="src/scenes/scene_config.js?v=f24-1"></script>
+  <script src="src/llm/stream.js?v=f24-1"></script>
+  <script src="src/llm/llm.js?v=f24-1"></script>
+  <script src="src/llm/model_discovery.js?v=f24-1"></script>
+  <script src="src/state/store.js?v=f24-1"></script>
+  <script src="src/tools/tools.js?v=f24-1"></script>
+  <script src="src/scenes/agents.js?v=f24-1"></script>
+  <script src="src/llm/simulated.js?v=f24-1"></script>
+  <script src="src/ui/render.js?v=f24-1"></script>
   <!-- F+22.1: 模型下拉 UI 拆分（F+17 hot zone） -->
-  <script src="src/ui/model_picker.js?v=f24-0"></script>
+  <script src="src/ui/model_picker.js?v=f24-1"></script>
   <!-- F+22.2: 历史任务 UI 拆分（F+18 改过） -->
-  <script src="src/ui/history.js?v=f24-0"></script>
+  <script src="src/ui/history.js?v=f24-1"></script>
   <!-- F+22.3: 记忆/学习拆分（4 个核心函数） -->
-  <script src="src/memory/learning.js?v=f24-0"></script>
-  <script src="src/scenes/orchestrator.js?v=f24-0"></script>
+  <script src="src/memory/learning.js?v=f24-1"></script>
+  <script src="src/scenes/orchestrator.js?v=f24-1"></script>
   <!-- F+14 i18n Phase 1: i18n.js 必须在 zh/en 之前；zh/en 注册到 MAT_I18N 后由 app.js init 触发 walkAndTranslate -->
-  <script src="src/i18n/i18n.js?v=f24-0"></script>
-  <script src="src/i18n/zh.js?v=f24-0"></script>
-  <script src="src/i18n/en.js?v=f24-0"></script>
+  <script src="src/i18n/i18n.js?v=f24-1"></script>
+  <script src="src/i18n/zh.js?v=f24-1"></script>
+  <script src="src/i18n/en.js?v=f24-1"></script>
 </head>
 <body>
   <!-- ========== 顶栏 ========== -->
@@ -665,7 +666,7 @@
             <div class="intro-vendor-models">gemini-2.5-flash-lite · 2.5-flash · 2.5-pro · 2.0-flash-lite · 2.0-flash</div>
           </div>
         </div>
-        <p style="color:var(--text-muted);margin-top:12px">所有模型走<strong>浏览器直连</strong>厂商 API，Key 仅在你本地 localStorage 存储与传输，不经任何中间服务器。你完全控制使用哪些模型、消耗多少 Token。</p>
+        <p style="color:var(--text-muted);margin-top:12px">所有模型走<strong>浏览器直连</strong>厂商 API。保存 Key 后自动拉取厂商 <code>/v1/models</code> 同步最新模型（新模型自动出现、退役模型自动隐藏），也可随时手动刷新；未配置 Key 时使用上方内置列表。Key 加密存储于本地，不经任何中间服务器。你完全控制使用哪些模型、消耗多少 Token。</p>
       </section>
 
       <section class="intro-section" id="sec-13">
@@ -675,11 +676,11 @@
         <div class="intro-security-grid">
           <div class="intro-security-card">
             <strong>🛡 零中间服务器</strong>
-            浏览器直连 6 家厂商 API，Key 仅在本地 localStorage 存储与传输，Vercel 只托管静态文件不经手任何 API 调用。
+            浏览器直连 6 家厂商 API，Key 加密存储于本地（首次填入时引导设置主密码，可跳过），Vercel 只托管静态文件不经手任何 API 调用。
           </div>
           <div class="intro-security-card">
-            <strong>🔒 可选 AES-GCM 加密 <span class="new-pill">NEW</span></strong>
-            设置主密码 → PBKDF2 10 万次迭代派生 → AES-GCM 256 位加密 API Keys + 记忆库。会话级密钥缓存 sessionStorage（关浏览器即清）。
+            <strong>🔒 AES-GCM 加密（首次填 Key 引导开启） <span class="new-pill">NEW</span></strong>
+            首次保存真实 API Key 时引导设置主密码（可跳过）→ PBKDF2 10 万次迭代派生 → AES-GCM 256 位加密 API Key + 项目上下文 + 记忆库，以 <code>ENC1:</code> 密文落盘 localStorage。会话级密钥缓存 sessionStorage（关浏览器即清），新会话需主密码解锁。
           </div>
           <div class="intro-security-card">
             <strong>💉 Prompt 注入防护</strong>
@@ -706,9 +707,9 @@
 
         <div class="intro-eng-grid">
           <div class="intro-eng-card">
-            <div class="intro-eng-stat">85</div>
+            <div class="intro-eng-stat">86</div>
             <div class="intro-eng-label">自动化测试</div>
-            <div class="intro-eng-desc">76 单测 + 9 E2E，覆盖路由 / 记忆 / 加密 / 场景 / 工具。<code>npm test</code> 1.6 秒跑完</div>
+            <div class="intro-eng-desc">77 单测 + 9 E2E，覆盖路由 / 记忆 / 加密 / 场景 / 工具。<code>npm test</code> 1.6 秒跑完</div>
           </div>
           <div class="intro-eng-card">
             <div class="intro-eng-stat">2</div>
@@ -1219,7 +1220,10 @@
         <!-- F+17.13：动态生成（buildModelOptgroups），跟 Agent 配置下拉一致体验（自定义/管理/智能感知） -->
         <select id="defaultModel"></select>
         <div class="field-hint" id="defaultModelHint"></div>
+        <div class="field-hint" id="modelDiscoveryStatus" style="color:var(--accent)">模型列表状态加载中…</div>
+        <button type="button" class="ghost-btn small" id="refreshModelsBtn" style="margin-top:8px">🔄 刷新模型列表</button>
         <div class="field-hint" style="color:var(--text-dim)">
+          F+23：保存任意厂商 Key 后会自动拉取该厂商最新模型；新模型标 🆕，即将停用标 ⚠，退役模型自动隐藏。你手动填的自定义模型始终保留。<br/>
           仅用于 6 个内置场景（写作 / 分析 / 规划 / 学习 / 创意 / 决策）。
           <strong>自定义团队不受此影响</strong> —— 每个 Agent 在团队构建器里独立选择模型。
         </div>
@@ -1297,10 +1301,19 @@
         </div>
         <div class="field-hint">导出 = 备份到本地文件 · 导入 = 跨设备迁移 · 清空 = 删项目上下文 + 画像 + Agent 记忆 + 知识库 + 项目列表</div>
       </div>
+      <div class="field" style="margin-top:14px">
+        <label>🔒 本地数据加密</label>
+        <div class="field-hint" id="encStatusHint" style="margin-bottom:8px">检测中…</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <button class="ghost-btn" id="encEnableBtn">🔒 设置主密码并加密</button>
+          <button class="ghost-btn" id="encDisableBtn" style="display:none;color:var(--danger)">🔓 关闭加密</button>
+        </div>
+        <div class="field-hint">首次保存 API Key 时会引导设置。加密后 Key 与记忆库以 AES-GCM 256 存储；忘记主密码无法恢复。</div>
+      </div>
       <div class="security-note">
         <strong>⚠️ 安全声明</strong>
         <ul>
-          <li>API Key 明文存储于本地 localStorage</li>
+          <li id="encStorageNote">API Key 存储方式：检测中…</li>
           <li>不要在公共设备使用</li>
           <li>密钥仅在浏览器 → LLM 厂商之间传输</li>
           <li>日志/UI 中 Key 始终以 sk-…xxxx 形式显示</li>
@@ -1324,7 +1337,7 @@
   <!-- ========== Toast 容器 ========== -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="app.js?v=f24-0"></script>
+  <script src="app.js?v=f24-1"></script>
   <!-- F+13 Sprint 1.5/C: 浏览器内 smoke test runner，URL 加 ?test=1 触发 -->
   <script>
     (function() {
@@ -1338,8 +1351,8 @@
       });
       window.addEventListener('load', async () => {
         try {
-          await load('src/test/runner.js?v=f24-0');
-          await load('src/test/smoke.js?v=f24-0');
+          await load('src/test/runner.js?v=f24-1');
+          await load('src/test/smoke.js?v=f24-1');
           await new Promise(r => setTimeout(r, 300));
           await MAT_TEST.run();
         } catch (e) {

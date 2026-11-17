@@ -88,7 +88,7 @@ const {
 } = MAT_ORCHESTRATOR;
 // F+13 Sprint 1.5 / Phase D wave 1
 const {
-  ENC_FLAG_KEY, ENC_SALT_KEY, ENC_SESSION_KEY, ENC_PBKDF2_ITERATIONS, ENC_SENSITIVE_KEYS,
+  ENC_FLAG_KEY, ENC_SALT_KEY, ENC_SESSION_KEY, ENC_ONBOARDING_KEY, ENC_PBKDF2_ITERATIONS, ENC_SENSITIVE_KEYS,
   encryptionSetup, encryptionUnlock, encryptionIsLocked, encryptionEnabled,
   encryptionRekey, encryptionDisable,
   readEncryptedJSON, writeEncryptedJSON,
@@ -586,11 +586,11 @@ async function waitWhilePaused() { while (state.paused && !state.aborted) await 
 
 /* ====================== 6. 持久化（localStorage） ====================== */
 
-function loadConfig() {
+async function loadConfig() {
+  // 敏感配置：经透明解密读取（未加密 / 无密钥时 readEncryptedJSON 对明文直接 JSON.parse）
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
+    const parsed = await readEncryptedJSON(STORAGE_KEY);
+    if (parsed) {
       // 向后兼容：旧字段 braveSearchKey → tavilyKey（一次性迁移）
       if (parsed.braveSearchKey && !parsed.tavilyKey) parsed.tavilyKey = '';
       delete parsed.braveSearchKey;
@@ -626,9 +626,8 @@ function loadConfig() {
     if (sp) state.scenePrompts = JSON.parse(sp);
   } catch {}
   try {
-    const m = localStorage.getItem(MEMORY_KEY);
-    if (m) {
-      const parsed = JSON.parse(m);
+    const parsed = await readEncryptedJSON(MEMORY_KEY);
+    if (parsed) {
       // 深合并，保留默认 settings 项以便后续新增字段不丢
       state.memory = {
         ...state.memory, ...parsed,
@@ -641,10 +640,10 @@ function loadConfig() {
     const p = localStorage.getItem(PROJECTS_KEY);
     if (p) state.projects = JSON.parse(p);
   } catch {}
-  // F+11 Level 3：加载项目隔离的 memory + activeProjectId
+  // F+11 Level 3：加载项目隔离的 memory + activeProjectId（敏感，透明解密）
   try {
-    const mbp = localStorage.getItem(MEMORY_BY_PROJECT_KEY);
-    if (mbp) state.memoryByProject = JSON.parse(mbp);
+    const mbp = await readEncryptedJSON(MEMORY_BY_PROJECT_KEY);
+    if (mbp) state.memoryByProject = mbp;
   } catch {}
   try {
     const apid = localStorage.getItem('myAgentTeam.activeProjectId');
@@ -3033,6 +3032,7 @@ function bindEvents() {
   }
 
   // 隐私：导出 / 导入 / 清空
+  bindEncryptionUI();
   $('exportMemoryBtn')?.addEventListener('click', exportMemoryJson);
   $('importMemoryBtn')?.addEventListener('click', () => $('importMemoryPicker').click());
   $('importMemoryPicker')?.addEventListener('change', (e) => {
@@ -3047,7 +3047,27 @@ function bindEvents() {
     });
     if (yes) clearAllMemory();
   });
-  $('saveConfigBtn').onclick = () => {
+  // F+23：手动刷新厂商模型列表
+  $('refreshModelsBtn')?.addEventListener('click', async () => {
+    if (!window.MAT_MODEL_DISCOVERY) return;
+    const btn = $('refreshModelsBtn');
+    const status = $('modelDiscoveryStatus');
+    btn.disabled = true;
+    if (status) status.textContent = '正在拉取厂商模型列表…';
+    try {
+      await MAT_MODEL_DISCOVERY.discover({ force: true });
+      refreshDefaultModelSelect();
+      toast('模型列表已更新', 'ok');
+    } catch (e) {
+      if (status) status.textContent = '刷新失败，已保留缓存或内置列表';
+      toast('模型列表刷新失败，已使用缓存', 'warn');
+    } finally {
+      btn.disabled = false;
+      if (typeof updateModelDiscoveryStatus === 'function') updateModelDiscoveryStatus();
+    }
+  });
+
+  $('saveConfigBtn').onclick = async () => {
     state.config.openaiKey = $('openaiKey').value.trim();
     state.config.anthropicKey = $('anthropicKey').value.trim();
     state.config.qwenKey = $('qwenKey').value.trim();
@@ -3060,7 +3080,15 @@ function bindEvents() {
     state.config.remember = $('rememberConfig').checked;
     saveConfig();
     closeDrawer();
-    toast('配置已保存', 'ok');
+    toast('配置已保存，正在同步模型列表…', 'ok');
+    // F+23：Key 变化后后台刷新厂商模型列表，失败不影响配置保存
+    if (window.MAT_MODEL_DISCOVERY) {
+      Promise.resolve(MAT_MODEL_DISCOVERY.discover({ force: true }))
+        .then(() => { refreshDefaultModelSelect(); toast('模型列表已同步', 'ok'); })
+        .catch(() => { toast('模型列表同步失败，已使用缓存或内置列表', 'warn'); });
+    }
+    // V2：首次填入真实 Key 且未加密时，引导设置主密码（可跳过）
+    try { await maybePromptEncryptionSetup(); } catch {}
   };
 
   // 输入框
@@ -3297,8 +3325,12 @@ function setupPasswordToggles() {
   });
 }
 
-function init() {
-  loadConfig();
+async function init() {
+  // 先恢复会话密钥（从 sessionStorage），这样 loadConfig 才能解密 ENC1: 密文
+  await _restoreSessionKey();
+  await loadConfig();
+  // 加密已启用但会话密钥缺失（换了会话/清了 sessionStorage）→ 弹密码框
+  if (encryptionIsLocked()) promptUnlock();
   // F+17：恢复上次失败的 model 记录（让下拉立刻显示 ⚠ 标）
   try { loadModelFailures(); } catch {}
   // F+17.1：恢复用户填过的自定义 model ID
@@ -3310,10 +3342,19 @@ function init() {
   bindEvents();
   // F+21：给 API Key 输入框加 👁 切换（init 阶段 input 已在 DOM 里只是 hidden）
   try { setupPasswordToggles(); } catch {}
-  // 模型默认值
-  if (!MODEL_PRICING[state.config.model]) state.config.model = 'gpt-4o-mini';
+  // 模型默认值：内置价目表 / 远程发现结果 / 用户自定义模型 三者任一命中即保留
+  const selectedIsKnown = !!MODEL_PRICING[state.config.model]
+    || !!(window.MAT_MODEL_DISCOVERY && MAT_MODEL_DISCOVERY.getModelMeta(state.config.model))
+    || (Array.isArray(state.customModels) && state.customModels.some(c => c.id === state.config.model));
+  if (!selectedIsKnown) state.config.model = 'gpt-4o-mini';
   // F+17.13：动态渲染 default model 下拉（首次 init 时也需要）
   refreshDefaultModelSelect();
+  // F+23：加载缓存的模型目录；若已配置 Key 且缓存过期则后台静默刷新
+  if (window.MAT_MODEL_DISCOVERY) {
+    Promise.resolve(MAT_MODEL_DISCOVERY.init({ autoRefresh: true }))
+      .then(() => refreshDefaultModelSelect())
+      .catch(() => {});
+  }
 
   // 首次访问自动展示介绍页（已看过则跳过）
   let introSeen = false;
@@ -3327,10 +3368,6 @@ function init() {
   try { runMemoryHygiene({ silent: true }); } catch {}
   // P3-B 启动时静默迁移大数据到 IDB（仅当 localStorage 接近上限）
   migrateBigDataToIDB().catch(() => {});
-  // P3-D 如果开启加密但 sessionKey 缺失 → 弹密码框
-  _restoreSessionKey().then(k => {
-    if (encryptionEnabled() && !k) promptUnlock();
-  });
   // F+11 Level 3：项目空间 UI 初始化
   try {
     bindProjectUI();
@@ -3387,6 +3424,128 @@ async function promptUnlock(retry = false) {
   } catch {
     promptUnlock(true);
   }
+}
+
+/**
+ * V2：首次填入真实 API Key 且未加密时，引导用户设置主密码（可跳过）。
+ * - 已加密 / 未真正落盘 / 无真实 Key / 已引导过 → 直接返回
+ * - 用户跳过 → 写引导标记，明确提示明文风险，不再打扰
+ * - 用户设置密码 → encryptionSetup 全量加密，重新 saveConfig 落密文
+ */
+async function maybePromptEncryptionSetup() {
+  if (encryptionEnabled()) return;                    // 已加密
+  if (!state.config.remember) return;                 // 不落盘，无需加密
+  if (localStorage.getItem(ENC_ONBOARDING_KEY)) return; // 已引导过（含主动跳过）
+  const keys = ['openaiKey', 'anthropicKey', 'qwenKey', 'deepseekKey', 'doubaoKey', 'geminiKey'];
+  if (!keys.some(k => (state.config[k] || '').trim())) return; // 无真实 Key
+
+  const html = `
+    <p>你已填入 API Key。目前它们以<strong>明文</strong>保存在浏览器本地。</p>
+    <p style="font-size:12.5px;color:var(--text-muted);line-height:1.7">
+      设置一个主密码后，API Key 与记忆库会用 <strong>AES-GCM 256</strong> 加密保存（PBKDF2 10 万次派生）。<br/>
+      主密码只在你脑子里，忘记则数据无法恢复。<br/>
+      若暂不设置，密钥仍可用，但本机其他程序/脚本可读到本地明文。
+    </p>
+    <div class="field" style="margin-top:12px">
+      <input type="password" id="encSetupPwd" placeholder="设置主密码（至少 6 位）" autocomplete="new-password" style="width:100%" />
+    </div>
+  `;
+  const result = await showModal({
+    title: '🔒 是否加密保存 API Key？',
+    bodyHtml: html,
+    buttons: [
+      { label: '暂不设置', value: 'skip' },
+      { label: '取消', value: 'cancel' },
+      { label: '设置并加密', primary: true, value: () => $('encSetupPwd').value },
+    ],
+  });
+
+  if (result === 'cancel' || result === null) return;  // 下次保存再问
+  if (result === 'skip') {
+    localStorage.setItem(ENC_ONBOARDING_KEY, 'skipped');
+    toast('已跳过加密：API Key 以明文保存在本地', 'warn', 4500);
+    return;
+  }
+  const pwd = String(result || '').trim();
+  if (pwd.length < 6) {
+    toast('主密码至少 6 位，已跳过加密', 'warn', 4000);
+    localStorage.setItem(ENC_ONBOARDING_KEY, 'skipped');
+    return;
+  }
+  try {
+    await encryptionSetup(pwd);
+    // 加密启用后重新落盘（此时 config/memory 会写成 ENC1: 密文）
+    saveConfig();
+    saveMemory();
+    saveProjectMemory();
+    localStorage.setItem(ENC_ONBOARDING_KEY, 'done');
+    toast('已启用加密：API Key 与记忆库已加密保存', 'ok', 4500);
+  } catch (e) {
+    console.warn('encryption setup failed', e);
+    toast('加密设置失败，数据保持原样', 'warn', 4000);
+  }
+}
+
+/** 更新设置抽屉里的加密状态显示与按钮可见性 */
+function refreshEncryptionUI() {
+  const enabled = encryptionEnabled();
+  const hint = $('encStatusHint');
+  const note = $('encStorageNote');
+  const enableBtn = $('encEnableBtn');
+  const disableBtn = $('encDisableBtn');
+  if (hint) hint.textContent = enabled
+    ? '✅ 已启用加密：API Key 与记忆库以 AES-GCM 256 加密保存。'
+    : '当前为明文存储。设置主密码可加密保护。';
+  if (note) note.textContent = enabled
+    ? 'API Key 已加密存储于本地（ENC1: 密文）'
+    : 'API Key 明文存储于本地 localStorage';
+  if (enableBtn) enableBtn.style.display = enabled ? 'none' : '';
+  if (disableBtn) disableBtn.style.display = enabled ? '' : 'none';
+}
+
+/** 绑定加密开关按钮（在 bindEvents 中调用） */
+function bindEncryptionUI() {
+  $('encEnableBtn')?.addEventListener('click', async () => {
+    const result = await showModal({
+      title: '🔒 设置主密码并加密',
+      bodyHtml: `
+        <p>设置后，API Key 与记忆库将以 AES-GCM 256 加密保存（PBKDF2 10 万次派生）。</p>
+        <input type="password" id="encNewPwd" placeholder="主密码（至少 6 位）" autocomplete="new-password" style="width:100%" />
+        <p style="font-size:11.5px;color:var(--danger);margin-top:8px">忘记主密码 = 数据无法恢复。请务必记住。</p>
+      `,
+      buttons: [{ label: '取消', value: null }, { label: '启用加密', primary: true, value: () => $('encNewPwd').value }],
+    });
+    if (!result) return;
+    const pwd = String(result).trim();
+    if (pwd.length < 6) { toast('主密码至少 6 位', 'warn'); return; }
+    try {
+      await encryptionSetup(pwd);
+      saveConfig(); saveMemory(); saveProjectMemory();
+      localStorage.setItem(ENC_ONBOARDING_KEY, 'done');
+      refreshEncryptionUI();
+      toast('已启用加密', 'ok');
+    } catch (e) {
+      console.warn('encryption setup failed', e);
+      toast('加密设置失败', 'warn');
+    }
+  });
+  $('encDisableBtn')?.addEventListener('click', async () => {
+    const ok = await showModal({
+      title: '🔓 关闭加密',
+      bodyHtml: '<p>关闭后，API Key 与记忆库将以<strong>明文</strong>保存。确定继续？</p>',
+      buttons: [{ label: '取消', value: false }, { label: '确认关闭', primary: true, value: true }],
+    });
+    if (!ok) return;
+    try {
+      await encryptionDisable();
+      refreshEncryptionUI();
+      toast('已关闭加密（改为明文存储）', 'warn');
+    } catch (e) {
+      console.warn('encryption disable failed', e);
+      toast('关闭加密失败', 'warn');
+    }
+  });
+  refreshEncryptionUI();
 }
 
 /* ====================== 隐私 / 备份 ====================== */

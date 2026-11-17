@@ -26,6 +26,17 @@ function refreshDefaultModelSelect() {
   if (!sel) return;
   sel.innerHTML = buildModelOptgroups(state.config.model);
   sel.dataset.prevValue = state.config.model;
+  updateModelDiscoveryStatus();
+}
+
+function updateModelDiscoveryStatus() {
+  const el = $('modelDiscoveryStatus');
+  if (!el) return;
+  try {
+    el.textContent = (window.MAT_MODEL_DISCOVERY && MAT_MODEL_DISCOVERY.statusText()) || '';
+  } catch (e) {
+    el.textContent = '模型列表状态读取失败';
+  }
 }
 
 function getModelGroups() {
@@ -41,9 +52,9 @@ function getModelGroups() {
 }
 
 function buildModelOptgroups(selectedModel) {
-  const groups = getModelGroups();  // F+17.11：仍用来生成 vendor 名（让用户决定哪个 vendor 想填 model），不再渲染 hardcode model option
+  const groups = getModelGroups();
 
-  // F+17 step 1：自动清理 30 天前的 failure 记录（model 可能已恢复）
+  // F+17：自动清理 30 天前的 failure 记录（model 可能已恢复）
   const THIRTY_DAYS = 30 * 24 * 3600 * 1000;
   const now = Date.now();
   const failures = state.modelFailures || (state.modelFailures = {});
@@ -51,7 +62,6 @@ function buildModelOptgroups(selectedModel) {
     if (now - (failures[m].ts || 0) > THIRTY_DAYS) delete failures[m];
   }
 
-  // F+17 helpers
   const hasKey = (vendor) => !!state.config[vendor + 'Key']?.trim();
   const fmtAgo = (ts) => {
     if (!ts) return '';
@@ -61,9 +71,9 @@ function buildModelOptgroups(selectedModel) {
     if (sec < 86400) return `${Math.floor(sec / 3600)} 小时前`;
     return `${Math.floor(sec / 86400)} 天前`;
   };
+  const esc = (s) => (typeof escapeHtml === 'function' ? escapeHtml(s) : String(s));
 
-  // F+17.11：所有 model 通过 customModels 统一管理，移除 hardcode 概念
-  // selectedModel 不在 customModels → 自动加入（向前兼容旧 sceneConfigs 可能指向旧 hardcode ID）
+  // 用户自定义模型：最高优先级，始终保留
   const customModels = Array.isArray(state.customModels) ? state.customModels : (state.customModels = []);
   const customIds = new Set(customModels.map(c => c.id));
   if (selectedModel && !customIds.has(selectedModel)) {
@@ -72,7 +82,6 @@ function buildModelOptgroups(selectedModel) {
     try { saveCustomModels(); } catch {}
   }
 
-  // F+17.16：customModels 按 vendor 分组散布到对应 optgroup
   const knownVendors = new Set(groups.map(g => g.vendor));
   const customByVendor = {};
   const customUnknown = [];
@@ -85,36 +94,96 @@ function buildModelOptgroups(selectedModel) {
     }
   });
 
-  const renderCustomOption = (c) => {
-    const isSelected = c.id === selectedModel;
-    const fail = failures[c.id];
+  // F+23：远程发现结果（厂商 /v1/models），按 vendor 分组
+  const remoteByVendor = {};
+  try {
+    const remote = (window.MAT_MODEL_DISCOVERY && MAT_MODEL_DISCOVERY.getModels()) || [];
+    remote.forEach(m => {
+      if (!remoteByVendor[m.vendor]) remoteByVendor[m.vendor] = [];
+      remoteByVendor[m.vendor].push(m);
+    });
+  } catch (e) {}
+
+  const staticByVendor = {};
+  groups.forEach(g => { staticByVendor[g.vendor] = g.models || []; });
+
+  const hidden = state.hiddenModels || {};
+  const purged = state.purgedModels || {};
+  const NEW_MS = 90 * 24 * 3600 * 1000;
+
+  const renderOption = (id, vendor, source, meta) => {
+    if (!id || purged[id] || hidden[id]) return '';
+    const isSelected = id === selectedModel;
+    const fail = failures[id];
     const failMark = fail ? ' ⚠' : '';
-    const tooltip = fail
-      ? `上次失败：${fmtAgo(fail.ts)} · HTTP ${fail.status || '-'} · ${(fail.msg || '').slice(0, 100)}`
-      : `自定义 model ID${c.vendor ? `（${c.vendor}）` : ''}`;
-    return `<option value="${escapeHtml(c.id)}"${isSelected ? ' selected' : ''} title="${escapeHtml(tooltip)}">${escapeHtml(c.id)}${failMark}${fail ? ' · 上次失败' : ''}</option>`;
+
+    let sourceMark = '';
+    let tooltip = '';
+    if (source === 'custom') {
+      sourceMark = '⭐ ';
+      tooltip = '自定义 model（用户保留，不会被自动同步覆盖）';
+    } else if (source === 'remote') {
+      tooltip = '厂商实时列表';
+      if (meta && meta.created && (now - meta.created) < NEW_MS) sourceMark = '🆕 ';
+      if (meta && meta.lifecycle === 'deprecated') {
+        sourceMark = '⚠ ';
+        tooltip = '厂商标记为即将停用';
+      }
+      if (meta && meta.ctx) tooltip += ` · 上下文 ${meta.ctx}`;
+      if (meta && meta.pricing) tooltip += ` · $${meta.pricing.in}/$${meta.pricing.out} per 1M`;
+    } else {
+      tooltip = '内置列表（未拉取到厂商实时列表时使用）';
+    }
+    if (meta && meta.vendor) tooltip += ` · ${meta.vendor}`;
+    if (fail) tooltip = `上次失败：${fmtAgo(fail.ts)} · HTTP ${fail.status || '-'} · ${(fail.msg || '').slice(0, 100)}`;
+
+    return `<option value="${esc(id)}"${isSelected ? ' selected' : ''} title="${esc(tooltip)}">${sourceMark}${esc(id)}${failMark}${fail ? ' · 上次失败' : ''}</option>`;
   };
 
-  // F+17.16：顶部"❓ 未识别 vendor"区（仅当存在）—— vendor 为 null/未知 时兜底
   let unknownOptgroupHtml = '';
   if (customUnknown.length > 0) {
-    const opts = customUnknown.map(renderCustomOption).join('');
-    unknownOptgroupHtml = `<optgroup label="❓ 未识别 vendor（${customUnknown.length}）—— 可在管理弹窗调整">${opts}</optgroup>`;
+    const opts = customUnknown.map(c => renderOption(c.id, c.vendor || null, 'custom', null)).join('');
+    if (opts) unknownOptgroupHtml = `<optgroup label="⭐ 未识别 vendor（${customUnknown.length}）—— 可在管理弹窗调整">${opts}</optgroup>`;
   }
 
-  // F+17.11 + 17.16：每个 vendor optgroup 显示该 vendor 的 customModels + "✏️ 填自定义..." 触发器
   const groupsHtml = groups.map(g => {
     const keyOk = hasKey(g.vendor);
-    const vendorCustoms = customByVendor[g.vendor] || [];
+    const seen = new Set();
+    const opts = [];
+
+    (customByVendor[g.vendor] || []).forEach(c => {
+      if (seen.has(c.id)) return;
+      seen.add(c.id);
+      const html = renderOption(c.id, g.vendor, 'custom', null);
+      if (html) opts.push(html);
+    });
+
+    const remoteList = remoteByVendor[g.vendor] || [];
+    remoteList.forEach(m => {
+      if (seen.has(m.id)) return;
+      seen.add(m.id);
+      const html = renderOption(m.id, g.vendor, 'remote', m);
+      if (html) opts.push(html);
+    });
+
+    // 仅当该厂商没有远程列表时才用静态模型兜底
+    if (!remoteList.length) {
+      (staticByVendor[g.vendor] || []).forEach(id => {
+        if (seen.has(id)) return;
+        seen.add(id);
+        const html = renderOption(id, g.vendor, 'static', null);
+        if (html) opts.push(html);
+      });
+    }
+
+    const count = opts.length;
     const groupLabel = keyOk
-      ? `✓ ${g.label}${vendorCustoms.length ? `（${vendorCustoms.length}）` : ''}`
-      : `🔑 ${g.label} · 未配 Key${vendorCustoms.length ? `（${vendorCustoms.length}）` : ''}`;
-    const customOpts = vendorCustoms.map(renderCustomOption).join('');
+      ? `✓ ${g.label}${count ? `（${count}）` : ''}`
+      : `🔑 ${g.label} · 未配 Key${count ? `（${count}）` : ''}`;
     const addCustomOpt = `<option value="__add_custom__:${g.vendor}" title="点击弹窗输入任意 model ID（如新版本 / ep-xxxxx）">✏️ 填自定义 ${g.label.split('（')[0]} model ID...</option>`;
-    return `<optgroup label="${escapeHtml(groupLabel)}">${customOpts}${addCustomOpt}</optgroup>`;
+    return `<optgroup label="${esc(groupLabel)}">${opts.join('')}${addCustomOpt}</optgroup>`;
   }).join('');
 
-  // 末尾管理入口
   const manageOptgroup = `<optgroup label="—————————————"><option value="__manage_all_models__" title="弹窗：管理自定义 model">🛠 管理 model 下拉...</option></optgroup>`;
 
   return unknownOptgroupHtml + groupsHtml + manageOptgroup;
@@ -193,7 +262,7 @@ function openManageAllModelsModal(onChange) {
       : '';
     return `
       <p style="color:var(--text-muted);font-size:12.5px;margin-bottom:14px">
-        管理你的 model 列表。新增请在主下拉里每个 vendor optgroup 末尾点 "✏️ 填自定义..."。
+        管理你手动添加/保留的 model。厂商最新模型由「刷新模型列表」自动同步，不在这里维护；删除自定义项不会删除厂商列表里的同 ID 模型。
       </p>
 
       <h4 style="margin:0 0 8px;font-size:13px">📝 你的 model</h4>
@@ -262,9 +331,10 @@ function openManageAllModelsModal(onChange) {
   window.handleAddCustomModel = handleAddCustomModel;
   window.openManageAllModelsModal = openManageAllModelsModal;
   window.refreshDefaultModelSelect = refreshDefaultModelSelect;
+  window.updateModelDiscoveryStatus = updateModelDiscoveryStatus;
 
   return {
     getModelGroups, buildModelOptgroups, handleAddCustomModel,
-    openManageAllModelsModal, refreshDefaultModelSelect,
+    openManageAllModelsModal, refreshDefaultModelSelect, updateModelDiscoveryStatus,
   };
 })();

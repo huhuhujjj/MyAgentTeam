@@ -490,7 +490,7 @@ const tools = opts.forceTools
 
 | 项 | 实现 |
 |----|------|
-| API Key 存储 | 浏览器 localStorage 明文（V2 升级为 PBKDF2+AES-GCM 可选） |
+| API Key 存储 | 首次填 Key 引导设主密码，PBKDF2+AES-GCM 256 加密后存入 localStorage（`ENC1:`）；可跳过回到明文 |
 | Key 显示 | UI 与日志中始终以 `sk-…xxxx` mask |
 | XSS 防护 | DOMPurify 清洗 Markdown 输出（禁用 script/iframe/on*）|
 | Prompt 注入防护 | 用户输入用 `<user_input>` 标签包裹 + 系统提示词明确忽略指令性内容 |

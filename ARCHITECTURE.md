@@ -41,7 +41,9 @@ flowchart LR
 | `app.js` | 页面事件、应用启动和暂未拆出的协调逻辑 | 大改前确认是否可归入 `src/` 既有模块 |
 | `src/lib/constants.js` | 存储键、超时、token/成本等常量 | 避免在多个模块重复定义边界值 |
 | `src/lib/utils.js` | 共用纯工具函数 | 纯逻辑适合单元测试 |
-| `src/lib/vendor.js` | 模型厂商和模型元数据 | 修改模型识别时检查自定义 model ID 的兜底行为 |
+| `src/lib/vendor.js` | 模型价目 + vendor 推断（静态表为兜底，远程元数据优先） | 避免在多个模块重复定义边界值；F+23 起远程发现结果可补充 ctx / 价格 |
+| `src/llm/model_discovery.js` | F+23 厂商 `/v1/models` 动态发现、过滤、缓存 | 新增厂商时只需加 endpoint 与归一化；用户自定义模型优先级最高 |
+| `api/models.js` | F+23 模型列表同源 Edge 代理 | 白名单 vendor，不记录 Key，不转发任意 URL |
 | `src/state/state.js` | 初始状态定义 | 新增持久化状态时同步检查 load/save 和迁移 |
 | `src/state/store.js` | 项目空间及其记忆访问逻辑 | 项目级数据读写应遵守 active project 隔离 |
 | `src/state/kb.js` | 知识库状态与相关行为 | 注意 IndexedDB 与应用状态同步 |
@@ -89,7 +91,7 @@ flowchart LR
 
 ## 数据与存储
 
-- `localStorage`：配置、任务历史、累计数据、团队/场景配置及部分记忆。
+- `localStorage`：配置、任务历史、累计数据、团队/场景配置、部分记忆，以及 F+23 的模型目录缓存（`myAgentTeam.modelCatalog`，TTL 24h）。
 - `sessionStorage`：加密会话派生密钥缓存等当前会话数据。
 - IndexedDB：适合较大或结构化的知识库数据。
 - 项目空间：记忆/历史中部分字段按 active project 分区；修改存储结构需检查迁移和删除项目时的清理。

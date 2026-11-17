@@ -113,6 +113,10 @@ window.MAT_STATE = (function() {
     // F+17.5：永久移除的 model（不出现在下拉 + 不出现在"已删除"区，UI 不可撤销）
     // 只能通过 manage 弹窗底部"🔄 重置所有 model 偏好"全清后门恢复
     purgedModels: {},
+    // F+23：厂商 /v1/models 动态发现结果
+    // 结构：{ models: [{id,vendor,created,lifecycle,ctx,capabilities,pricing,source}], fetchedAt, errors }
+    // 用户自定义模型仍保存在 customModels，优先级高于这里
+    modelCatalog: { models: [], fetchedAt: 0, errors: {} },
   };
 
   // 双暴露：window.state 兼容 IIFE modules，未来 ES modules 时 export

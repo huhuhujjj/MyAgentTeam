@@ -7,10 +7,17 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { webcrypto } from 'node:crypto';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_PATH = path.resolve(__dirname, '..', 'app.js');
 const APP_CODE = fs.readFileSync(APP_PATH, 'utf8');
+const INDEX_PATH = path.resolve(__dirname, '..', 'index.html');
+const INDEX_HTML = fs.readFileSync(INDEX_PATH, 'utf8');
+const MODULE_SCRIPTS = Array.from(INDEX_HTML.matchAll(/<script\s+src="(src\/[^"]+)"/g))
+  .map((m) => m[1].split('?')[0]);
 
 function makeStorage() {
   const data = {};
@@ -28,25 +35,27 @@ function makeStorage() {
 function makeFakeDOM() {
   const noopEl = {
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
-    appendChild() {}, removeChild() {}, prepend() {}, remove() {},
+    appendChild() {}, removeChild() {}, prepend() {}, remove() {}, insertBefore() {},
     addEventListener() {}, removeEventListener() {},
     querySelector: () => null,
     querySelectorAll: () => [],
-    setAttribute() {}, getAttribute: () => null,
+    setAttribute() {}, getAttribute: () => null, removeAttribute() {},
     style: {}, dataset: {},
-    innerHTML: '', textContent: '', value: '',
-    children: [], parentElement: null,
-    click() {}, focus() {}, blur() {},
+    innerHTML: '', textContent: '', value: '', checked: false, className: '',
+    children: [], parentElement: null, firstChild: null, lastChild: null,
+    click() {}, focus() {}, blur() {}, scrollIntoView() {},
+    getBoundingClientRect: () => ({ top: 0, left: 0, width: 0, height: 0 }),
   };
+  const el = () => ({ ...noopEl });
   return {
     addEventListener() {},
     removeEventListener() {},
-    getElementById: () => null,
-    querySelector: () => null,
+    getElementById: () => el(),
+    querySelector: () => el(),
     querySelectorAll: () => [],
-    createElement: () => ({ ...noopEl }),
-    body: { ...noopEl },
-    documentElement: { ...noopEl },
+    createElement: () => el(),
+    body: el(),
+    documentElement: el(),
   };
 }
 
@@ -79,15 +88,30 @@ export function makeSandbox() {
     location: { href: 'http://localhost/', reload() {} },
     navigator: { clipboard: { writeText: () => Promise.resolve() } },
     performance: { now: () => Date.now() },
+    scrollTo() {}, scroll() {}, alert() {}, confirm: () => true, prompt: () => null,
   };
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
 
   vm.createContext(sandbox);
+
+  sandbox._moduleErrors = [];
+  for (const rel of MODULE_SCRIPTS) {
+    const full = path.resolve(__dirname, '..', rel);
+    try {
+      vm.runInContext(fs.readFileSync(full, 'utf8'), sandbox, { filename: rel });
+    } catch (e) {
+      sandbox._moduleErrors.push({ file: rel, error: e });
+    }
+  }
+
   try {
     vm.runInContext(APP_CODE, sandbox, { filename: 'app.js' });
   } catch (e) {
     sandbox._loadError = e;
   }
+
+  require('./globals').exposeGlobals(sandbox);
+
   return sandbox;
 }

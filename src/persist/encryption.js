@@ -13,6 +13,7 @@ window.MAT_ENCRYPTION = (function() {
   const ENC_FLAG_KEY = 'myAgentTeam.encryptionEnabled';
   const ENC_SALT_KEY = 'myAgentTeam.encryptionSalt';
   const ENC_SESSION_KEY = 'myAgentTeam.sessionDerivedKey';  // base64 in sessionStorage
+  const ENC_ONBOARDING_KEY = 'myAgentTeam.encOnboarded';    // 首次引导已处理（设密码或跳过）
   const ENC_PBKDF2_ITERATIONS = 100_000;
   const ENC_SENSITIVE_KEYS = [STORAGE_KEY, MEMORY_KEY, MEMORY_BY_PROJECT_KEY];  // F+11 项目隔离 memory 也加密
   
@@ -161,7 +162,7 @@ window.MAT_ENCRYPTION = (function() {
   
 
   return {
-    ENC_FLAG_KEY, ENC_SALT_KEY, ENC_SESSION_KEY, ENC_PBKDF2_ITERATIONS, ENC_SENSITIVE_KEYS,
+    ENC_FLAG_KEY, ENC_SALT_KEY, ENC_SESSION_KEY, ENC_ONBOARDING_KEY, ENC_PBKDF2_ITERATIONS, ENC_SENSITIVE_KEYS,
     encryptionSetup, encryptionUnlock, encryptionIsLocked, encryptionEnabled,
     encryptionRekey, encryptionDisable,
     readEncryptedJSON, writeEncryptedJSON,

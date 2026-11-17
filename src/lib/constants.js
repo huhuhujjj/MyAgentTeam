@@ -35,6 +35,7 @@ window.MAT_CONSTANTS = (function() {
   const CUSTOM_MODELS_KEY        = 'myAgentTeam.customModels';        // F+17.1 用户填过的自定义 model ID 列表
   const HIDDEN_MODELS_KEY        = 'myAgentTeam.hiddenModels';        // F+17.3 用户从下拉里隐藏的 hardcode model（过期/不想看）
   const PURGED_MODELS_KEY        = 'myAgentTeam.purgedModels';        // F+17.5 永久移除（不出现在下拉 + 不出现在"已删除"区）
+  const MODEL_CATALOG_KEY        = 'myAgentTeam.modelCatalog';        // F+23 厂商 /v1/models 动态发现结果（TTL 24h）
 
   // ===== 容量限制 =====
   const HISTORY_LIMIT            = 50;     // 历史任务最多保留条数
@@ -87,7 +88,7 @@ window.MAT_CONSTANTS = (function() {
     MEMORY_KEY, ACTIVE_TASK_KEY,
     PROJECTS_KEY, MEMORY_BY_PROJECT_KEY,
     KB_KEY,
-    MODEL_FAILURES_KEY, CUSTOM_MODELS_KEY, HIDDEN_MODELS_KEY, PURGED_MODELS_KEY,
+    MODEL_FAILURES_KEY, CUSTOM_MODELS_KEY, HIDDEN_MODELS_KEY, PURGED_MODELS_KEY, MODEL_CATALOG_KEY,
     // capacity
     HISTORY_LIMIT, MEMORY_MAX_PROFILE_FACTS, MEMORY_DEFAULT_BUDGET,
     MAX_INTERVENTIONS, MAX_USER_INPUT_LEN,

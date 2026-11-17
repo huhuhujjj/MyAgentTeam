@@ -5,17 +5,22 @@ let sb;
 beforeAll(() => { sb = makeSandbox(); });
 
 describe('routeScene', () => {
-  it('"帮我写一份技术周报" → writing unique', () => {
-    const r = sb.routeScene('帮我写一份技术周报');
-    expect(r.state).toBe('unique');
-    expect(r.primary.id).toBe('writing');
-  });
-
-  it('"分析这个产品的竞品" → analysis unique', () => {
-    const r = sb.routeScene('分析这个产品的竞品');
-    expect(r.state).toBe('unique');
-    expect(r.primary.id).toBe('analysis');
-  });
+  // F+11/F+12 产品聚焦：自动路由只保留 规划/决策/起底 三个核心场景。
+  // writing/analysis/learning/creative 的场景定义与 Agent 仍保留（供自定义团队引用），
+  // 但不再参与自动路由 —— 因此这些旧输入现在应返回 unmatched。
+  const unrouted = [
+    ['帮我写一份技术周报', 'writing'],
+    ['分析这个产品的竞品', 'analysis'],
+    ['解释下量子计算原理', 'learning'],
+    ['帮我想一个 slogan', 'creative'],
+  ];
+  for (const [text, oldId] of unrouted) {
+    it(`"${text}" → 聚焦后不再自动路由（原 ${oldId}）`, () => {
+      const r = sb.routeScene(text);
+      expect(r.state).toBe('unmatched');
+      expect(r.primary).toBe(null);
+    });
+  }
 
   it('"规划一个上线方案" → planning unique', () => {
     const r = sb.routeScene('规划一个上线方案');
@@ -23,16 +28,9 @@ describe('routeScene', () => {
     expect(r.primary.id).toBe('planning');
   });
 
-  it('"解释下量子计算原理" → learning unique', () => {
-    const r = sb.routeScene('解释下量子计算原理');
-    expect(r.state).toBe('unique');
-    expect(r.primary.id).toBe('learning');
-  });
-
-  it('"帮我想一个 slogan" → creative unique', () => {
-    const r = sb.routeScene('帮我想一个 slogan');
-    expect(r.state).toBe('unique');
-    expect(r.primary.id).toBe('creative');
+  it('"起底这家公司" → dossier 命中', () => {
+    const r = sb.routeScene('起底这家公司');
+    expect(r.primary?.id).toBe('dossier');
   });
 
   it('"该选 React 还是 Vue" → decision unique (含"还是"特殊规则)', () => {
